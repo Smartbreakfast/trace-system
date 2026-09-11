@@ -58,4 +58,4 @@ curl -s https://trace.smartbreakfast.store/api/health
 | Phần còn lại của tên miền | Bên triển khai không có bất kỳ quyền nào |
 | Muốn ngắt | Xoá bản ghi CNAME này, subdomain tắt ngay |
 
-Bản đầy đủ kèm lý do vì sao chỉ có cách này: `Ket-noi-trace.smartbreakfast.store.pdf`.
+Lý do vì sao chỉ có cách này: mục 5 của `DEPLOY.md`.

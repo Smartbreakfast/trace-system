@@ -1,21 +1,118 @@
 # Tú Lệ Trace
 
-Hệ thống truy xuất nguồn gốc cho bột ngũ cốc **Tú Lệ Smart Breakfast**. Khách
-quét QR trên bao bì để xem lô thành phẩm, bốn nguyên liệu bản địa, ảnh từng
-công đoạn, hồ sơ kiểm định, và kiểm chứng dữ liệu có bị sửa sau khi công bố hay
-không.
+**Hệ thống truy xuất nguồn gốc nông sản ứng dụng blockchain — thử nghiệm trên
+sản phẩm Tú Lệ Smart Breakfast.**
 
-Đang chạy thật tại **https://trace.smartbreakfast.store**.
+Người mua quét mã QR trên bao bì để xem lô mình đang cầm: nguyên liệu lấy từ
+vùng nào, đi qua những công đoạn nào, ai làm, ảnh chụp tại chỗ, hồ sơ kiểm
+nghiệm — và tự kiểm chứng được rằng hồ sơ đó không bị sửa sau ngày công bố.
 
-Chạy hoàn toàn trên Cloudflare: một Worker giữ dữ liệu (D1), file (R2) và dựng
-luôn trang tra cứu; một project Pages đứng ra nhận tên miền.
+Đang chạy thật tại **https://trace.smartbreakfast.store**
 
-## Trang công khai không chạy Flutter
+---
 
-Trang tra cứu (`/` và `/t/:code`) là **HTML do Worker dựng sẵn**, không phải
-ứng dụng Flutter. Màn quản trị `/admin` vẫn là Flutter Web.
+## 1. Bài toán
 
-Lý do là con số. Đo trên cùng một lô, cùng một máy:
+Hàng giả và hàng không rõ nguồn gốc vẫn phổ biến, trong khi phần lớn giải pháp
+truy xuất hiện nay chỉ dẫn người mua tới **một trang thông tin do chính người
+bán quản lý**. Nếu toàn bộ dữ liệu nằm trong tay một chủ thể, người mua không
+có cách nào biết thông tin đã công bố có bị thay đổi về sau hay không. Dữ liệu
+lại nằm rải rác trên nhiều phần mềm, nên người mua không tiếp cận được đầy đủ
+lịch sử của sản phẩm.
+
+Nhóm thử nghiệm trên Tú Lệ Smart Breakfast vì trong quá trình bán thử, một bộ
+phận lớn người tiêu dùng không mua do chưa có đủ thông tin rõ ràng về nguồn gốc.
+
+## 2. Giải pháp
+
+Mỗi lô sản phẩm có một hồ sơ gồm nguyên liệu, công đoạn, ảnh và hồ sơ kiểm
+nghiệm. Khi người vận hành bấm **Hoàn thành lô**:
+
+1. Toàn bộ hồ sơ được gom thành một JSON chuẩn hoá (canonical),
+2. băm SHA-256,
+3. lưu thành **một phiên bản mới, không ghi đè bản cũ**,
+4. và mã băm được gửi lên blockchain qua hợp đồng `TuleTrace`.
+
+Trang truy xuất tính lại mã băm từ nội dung đang hiển thị rồi so với bản đã ghi
+lên chuỗi. Khớp thì hiện **ĐÃ XÁC MINH**; lệch thì hiện **DỮ LIỆU SAI LỆCH**,
+không có đường nào giấu đi. Blockchain ở đây không lưu hồ sơ — nó chỉ giữ **bằng
+chứng về thời điểm và nội dung**, nên dữ liệu cá nhân không bị đẩy lên chuỗi
+vĩnh viễn và chi phí gần như bằng không.
+
+## 3. Chức năng
+
+### 3.1 Hệ thống quản lý (`/admin`, cần token)
+
+- Tạo lô, khai nguyên liệu và từng công đoạn kèm khối lượng vào/ra, thời gian,
+  người thực hiện, tham số kỹ thuật.
+- Tải ảnh công đoạn, ảnh vùng nguyên liệu, giấy chứng nhận, phiếu kiểm nghiệm.
+- Công bố lô, xem lịch sử các bản đã công bố kèm trạng thái giao dịch.
+- Tải mã QR của lô dạng PNG để đưa thẳng sang bản in bao bì.
+
+### 3.2 Trang truy xuất (công khai)
+
+| Mục | Nội dung |
+| --- | --- |
+| Thông tin chung | Ảnh bìa, tên lô, mã lô, ngày sản xuất, hạn dùng, nơi sản xuất, mô tả |
+| Nguồn gốc | Sơ đồ quy trình bấm được: thành phẩm ở trên, truy ngược xuống bốn nhánh nguyên liệu; chạm một ô để xem chi tiết công đoạn hoặc hồ sơ vùng nguyên liệu |
+| Kiểm định chất lượng | Giấy chứng nhận và phiếu kiểm nghiệm, mở được ảnh cỡ đầy đủ |
+| Dải kiểm chứng | Trạng thái toàn vẹn, phiên bản, thời điểm công bố, mã giao dịch và liên kết mở giao dịch trên explorer |
+
+## 4. Kiến trúc và công nghệ
+
+| Khối | Chức năng | Công nghệ | Lý do kỹ thuật |
+| --- | --- | --- | --- |
+| Trang truy xuất | Hiển thị hồ sơ lô cho người quét QR | HTML dựng sẵn ở máy chủ (Cloudflare Worker) | Nội dung có mặt ngay byte đầu tiên; dùng được cả khi tắt JavaScript |
+| Màn quản trị | Nhập liệu, công bố, in QR | Flutter Web, go_router | Một codebase dùng lại được khi làm app di động |
+| Xử lý nghiệp vụ | Định tuyến, xác thực, kiểm tra đầu vào | Cloudflare Worker, Hono 4 | Không cần máy chủ thường trực |
+| Dữ liệu | Lô, nguyên liệu, công đoạn, phiên bản, hàng chờ | Cloudflare D1 (SQLite), 6 bảng | Tách dữ liệu nghiệp vụ khỏi blockchain |
+| Tệp minh chứng | Ảnh, video, hồ sơ kiểm nghiệm | Cloudflare R2, khoá tệp là mã băm nội dung | Tệp có tham chiếu ổn định theo nội dung, tráo ảnh là bị phát hiện |
+| Mã hoá | Chuẩn hoá và tạo mã băm | JSON canonical + SHA-256 | Cùng nội dung cho cùng một mã; đổi một ký tự là đổi mã băm |
+| Blockchain | Neo mã băm và mốc thời gian | Hạ tầng VBSN — mạng **Besu**, chainId 84001 | EBSI của châu Âu cũng dựng trên Besu, thuận cho định hướng xuất khẩu. Chỉ ghi bằng chứng, không ghi hồ sơ |
+| Vùng nguyên liệu | Định vị vùng trồng | Ảnh bản đồ hành chính cấp xã do người vận hành tải lên | Nói đúng mức chính xác mà dữ liệu thật sự có |
+
+```text
+người quét QR ──► trace.smartbreakfast.store (Cloudflare Pages)
+                         │
+                         ├── /, /t/:code  ──► Worker dựng HTML ──► D1 + R2
+                         ├── /api/*       ──► Worker
+                         └── /admin       ──► bản build Flutter
+                                                   │
+                     mã băm mỗi bản công bố ───────┴──► VBSN Besu (TuleTrace)
+```
+
+Hợp đồng: `0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca`, triển khai từ khối
+4.410.749.
+
+## 5. Những ràng buộc tự đặt ra
+
+Đây là phần quyết định hệ thống có đáng tin hay không, nhiều hơn cả phần công
+nghệ.
+
+- **Trang khách xem bản đã công bố, không xem dữ liệu đang sửa.** Người vận hành
+  sửa dở một lô đã bán ngoài thị trường thì khách vẫn thấy bản đã chốt; nội dung
+  mới chỉ ra mắt khi bấm công bố.
+- **Trường rỗng không được ghi vào payload.** Thêm một khoá rỗng là đổi mã băm
+  của mọi lô đã công bố trước đó, kể cả lô không ai đụng vào.
+- **Không hiển thị chính xác hơn mức dữ liệu thật sự có.** Trường "bán kính vùng
+  trồng" đã bị bỏ khỏi hệ thống vì con số trong đó là ước lượng chứ không đo đạc.
+- **Không bịa dữ liệu để trang trông đầy đặn.** Ảnh minh hoạ do máy sinh đều
+  được đóng dấu "ẢNH MINH HOẠ"; không có chứng nhận hay số liệu nào không lấy từ
+  hồ sơ thật.
+- **Không xoá tệp R2 khi còn một bản công bố tham chiếu tới nó.** Xoá file là làm
+  hỏng chính bản đã ghi lên chuỗi.
+- **Nén ảnh trước khi tải lên, không nén khi phục vụ.** Khoá tệp là mã băm nội
+  dung, nên nén lại sau khi công bố là làm sai lệch bản đã neo.
+
+## 6. Kết quả hiện tại
+
+**Dữ liệu thật đang chạy**: 4 lô đã công bố, mỗi lô 4 vùng nguyên liệu và 26
+công đoạn (24 công đoạn thuộc các nhánh nguyên liệu, cộng phối trộn và đóng
+gói), 36 ảnh minh chứng. Cả 4 lô đều ở trạng thái ĐÃ XÁC MINH và có giao dịch
+đã xác nhận trên Besu.
+
+**Tốc độ mở trang** — trước đây trang truy xuất chạy bằng Flutter Web; đo lại
+trên cùng một lô, cùng một máy sau khi chuyển sang HTML dựng sẵn:
 
 | | Bản Flutter | Bản HTML |
 | --- | --- | --- |
@@ -23,14 +120,96 @@ Lý do là con số. Đo trên cùng một lô, cùng một máy:
 | Nội dung hiện ra, wifi | 1,3 giây | **0,7 giây** |
 | Tải về tới lúc đó | 3,2 MB | 202 KB |
 
-Người quét mã QR đứng giữa chợ, mở trang đúng một lần rồi đóng: họ trả cái giá
-3,8 MB engine mà không nhận lại gì. Người vận hành mở màn quản trị mỗi ngày trên
-cùng một máy, tải một lần rồi nằm trong cache — ở đó Flutter là lựa chọn đúng.
+Người quét mã QR đứng giữa chợ, mở trang đúng một lần rồi đóng, nên 3,8 MB
+engine là cái giá họ trả mà không nhận lại gì. Màn quản trị thì ngược lại: mở
+mỗi ngày trên cùng một máy, tải một lần rồi nằm trong cache — ở đó Flutter vẫn
+là lựa chọn đúng.
 
-Trang mới dùng được cả khi tắt JavaScript: đổi mục bằng liên kết thật
-(`?tab=nguon-goc`), chi tiết một công đoạn hiện bằng `:target`, tra cứu bằng
-form GET. JavaScript chỉ thêm phần mượt: đổi mục không tải lại trang, chọn ô
-trên sơ đồ thì panel đổi tại chỗ, phóng to sơ đồ, và quét QR bằng camera.
+**Dung lượng ảnh**: nén sang WebP ngay trên trình duyệt lúc tải lên, đo trên bộ
+ảnh thật của một lô: 9,07 MB xuống 5,19 MB, riêng ảnh PNG giảm hơn 90%.
+
+## 7. Kiểm chứng độc lập
+
+Không cần tin vào trang web. Lấy mã băm hiện trên trang rồi đọc ngược từ chuỗi:
+
+```bash
+cd worker
+node scripts/chain-verify.mjs 0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca <sha256>
+```
+
+Script in ra mã lô, số phiên bản, ví đã ký, thời điểm và số khối — đọc thẳng từ
+sự kiện trên blockchain, không qua API của hệ thống.
+
+Chữ ký trên chuỗi hiện là chữ ký của **thương hiệu**: nó chứng minh dữ liệu
+không bị sửa sau khi chốt, chứ chưa chứng minh hợp tác xã đã giao hàng. Bước cho
+từng nhà cung cấp tự ký nằm ở [BLOCKCHAIN.md](BLOCKCHAIN.md).
+
+## 8. Chạy ở máy local
+
+```bash
+cd worker
+npm install
+cp .dev.vars.example .dev.vars          # điền token và khoá ký của riêng bạn
+npm run db:local && npm run db:seed:local
+cd .. && flutter build web --pwa-strategy=none --no-web-resources-cdn
+cd worker && npm run dev                # http://127.0.0.1:8787
+
+npm run test:api                        # smoke test API
+npm run typecheck
+cd .. && flutter test                   # 38 test
+```
+
+Bản build Flutter chỉ cần cho `/admin`. Trang truy xuất do Worker dựng, nên sửa
+`worker/src/page/` là thấy ngay mà không phải build lại Flutter.
+
+Triển khai lên Cloudflare: xem [DEPLOY.md](DEPLOY.md).
+
+## 9. Cấu trúc mã nguồn
+
+```text
+worker/
+  src/
+    index.ts      Hono routes: API và hai route dựng trang (/ và /t/:code)
+    trace.ts      tầng D1, snapshot, hàng chờ neo chuỗi
+    chain.ts      ký và gửi giao dịch, đọc trạng thái ví
+    media.ts      tải lên R2, kiểm định dạng, xoá an toàn
+    canonical.ts  JSON chuẩn hoá và SHA-256
+    page/         dựng HTML trang truy xuất: khung, ba mục, sơ đồ SVG, CSS, JS
+  migrations/     thay đổi lược đồ theo thời gian
+  scripts/        smoke test, công cụ chuỗi, chép lô
+contracts/        TuleTrace.sol và ABI đã biên dịch
+lib/              Flutter: màn quản trị
+functions/        Pages Functions: chuyển tiếp về Worker
+web/              index.html, script nén ảnh và quét QR, font cùng ảnh tĩnh
+tools/            công cụ Python: nhân lô, đồng bộ ảnh, nén ảnh, slide, font
+tai-lieu/         tài liệu cho khách và người vận hành
+```
+
+Công cụ dòng lệnh hay dùng, tất cả đi qua API quản trị chứ không đụng thẳng
+database:
+
+| Lệnh | Việc |
+| --- | --- |
+| `python tools/clone_batch.py <nguồn> <đích> --shift <ngày>` | Nhân một lô đầy đủ dữ liệu thành lô khác |
+| `python tools/sync_ingredient_media.py <nguồn> <đích...>` | Đồng bộ ảnh nguyên liệu giữa các lô |
+| `python tools/reencode_media.py <mã lô>` | Nén lại ảnh của một lô sang WebP rồi công bố |
+| `python tools/make_slides.py` | Sinh bộ slide trình bày |
+| `node worker/scripts/chain-status.mjs` | Ví, số dư, khối hiện tại |
+| `node worker/scripts/deploy-contract.mjs` | Biên dịch và triển khai hợp đồng |
+
+## 10. Kế hoạch hoàn thiện
+
+| Hạng mục | Việc | Ước lượng |
+| --- | --- | --- |
+| Phân quyền | Tài khoản riêng cho từng người vận hành, kèm nhật ký thao tác | 2 tuần |
+| Ứng dụng di động | Bản app cho người vận hành nhập liệu tại xưởng | 3 tuần |
+| Phi tập trung | Mỗi nhà cung cấp tự ký công đoạn của mình ([BLOCKCHAIN.md](BLOCKCHAIN.md)) | đang thiết kế |
+| Quy mô | Mở rộng lên 100 lô | 1 tháng |
+| Tiêu chuẩn | Bổ sung mã GS1 (GTIN, GLN) để liên thông hệ thống truy xuất quốc gia | 2 tuần |
+
+Vì sao chưa dùng GS1 ngay: mã GTIN phải mua theo năm từ GS1 Việt Nam và phải in
+lên bao bì, mà bao bì lô thử nghiệm đã in xong trước khi hệ thống chạy. Chi tiết
+ở [tai-lieu/KIEN_TRUC.md](tai-lieu/KIEN_TRUC.md).
 
 ## Tài liệu
 
@@ -38,315 +217,17 @@ trên sơ đồ thì panel đổi tại chỗ, phóng to sơ đồ, và quét QR
 | --- | --- |
 | [tai-lieu/KIEN_TRUC.md](tai-lieu/KIEN_TRUC.md) | Kiến trúc, mô hình dữ liệu, sơ đồ luồng, API, ràng buộc thiết kế |
 | [tai-lieu/HUONG_DAN_SU_DUNG.md](tai-lieu/HUONG_DAN_SU_DUNG.md) | Người vận hành: tạo lô, nhập liệu, công bố, in QR |
-| Bộ slide trình bày | Không nằm trong repo vì file nặng và bản gửi khách được sửa tay. Sinh bản mới bằng `python tools/make_slides.py`, ra `tai-lieu/Tu-Le-Trace-Slides.pptx` |
-| [tai-lieu/BAN_GHI_TRACE_domain_setup.md](tai-lieu/BAN_GHI_TRACE_domain_setup.md) | Gửi người quản lý tên miền: bản ghi CNAME cho trace.smartbreakfast.store |
 | [DEPLOY.md](DEPLOY.md) | Dựng hạ tầng Cloudflare, deploy, vận hành, chi phí |
 | [BLOCKCHAIN.md](BLOCKCHAIN.md) | Hợp đồng, mạng Besu, kế hoạch để từng nhà cung cấp tự ký |
 | [QUY_TRINH.md](QUY_TRINH.md) | Đối chiếu quy trình sản xuất thật và các tiêu chuẩn truy xuất |
-| [PROJECT_PLAN.md](PROJECT_PLAN.md) | Phạm vi và kiến trúc lúc khởi động dự án |
-| [AUDIT.md](AUDIT.md) | Kết quả rà soát và việc còn lại |
+| [tai-lieu/BAN_GHI_TRACE_domain_setup.md](tai-lieu/BAN_GHI_TRACE_domain_setup.md) | Người quản lý tên miền: bản ghi CNAME cần tạo |
 
-## Chạy local
+Bộ slide trình bày không nằm trong repo vì file nặng và bản gửi khách được sửa
+tay; sinh bản mới bằng `python tools/make_slides.py`.
 
-```bash
-cd worker
-npm install
-cp .dev.vars.example .dev.vars
-npm run db:local && npm run db:seed:local
-# database đã có sẵn dữ liệu thì chạy thêm: npm run db:migrate:local
+## Bảo mật
 
-cd .. && flutter build web --pwa-strategy=none --no-web-resources-cdn
-cd worker && npm run dev        # http://127.0.0.1:8787
-npm run test:api                # smoke test API
-npm run typecheck
-```
-
-Bản build Flutter vẫn cần cho `/admin`; trang tra cứu thì Worker tự dựng, nên
-sửa `worker/src/page/` là thấy ngay mà không phải build lại Flutter.
-
-Phía Flutter:
-
-```bash
-flutter test                    # 38 test
-flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8787/api
-```
-
-## Đường dẫn
-
-| Đường dẫn | Ai dựng | Nội dung |
-| --- | --- | --- |
-| `/` | Worker | Ô tra cứu và danh sách lô đã công bố |
-| `/t/:code` | Worker | Hồ sơ một lô, chính là địa chỉ mã QR trỏ tới |
-| `/t/:code?tab=nguon-goc` | Worker | Mở thẳng mục Nguồn gốc (`kiem-dinh` cho mục kiểm định) |
-| `/admin` | Flutter | Màn quản trị, cần token |
-| `/api/*` | Worker | API |
-| `/f/*` | tĩnh | Font woff2, logo, ảnh của trang |
-
-Trên tên miền thật, Pages nhận tất cả rồi chuyển `/`, `/t/*` và `/api/*` về
-Worker; `/admin` lấy bản build Flutter từ Pages. Xem `functions/_middleware.js`.
-
-## API
-
-Công khai:
-
-- `GET /api/health`
-- `GET /api/public/batches` (vài lô đã công bố, cho trang chủ)
-- `GET /api/public/featured` (lô công bố gần nhất, cho landing page)
-- `GET /api/public/traces/:code`
-- `GET /api/public/traces/:code/verify`
-- `GET /api/media/media/<sha256>.<ext>`
-
-Quản trị, cần `Authorization: Bearer <ADMIN_TOKEN>`:
-
-- `GET /api/admin/session`, `GET /api/admin/summary`
-- `GET /api/admin/product-batches?q=&sort=newest|oldest|name|code&page=&limit=`
-- `GET /api/admin/product-batches/:code/trace` (dữ liệu sống)
-- `GET /api/admin/product-batches/:code/snapshots`, `.../snapshots/:version`
-- `POST /api/admin/product-batches`, `PATCH /api/admin/product-batches/:code`
-- `POST /api/admin/product-batches/:code/publish`
-- `POST|PATCH|DELETE /api/admin/ingredient-batches[/:id]`
-- `POST|PATCH|DELETE /api/admin/process-events[/:id]`
-- `GET /api/admin/media/config`, `POST /api/admin/media`, `DELETE /api/admin/media/:id`
-- `GET /api/admin/chain`, `POST /api/admin/chain/send`, `POST /api/admin/chain/retry`
-
-## Trang tra cứu
-
-Ba mục, đúng cách khách hàng mô tả sản phẩm:
-
-1. **Thông tin chung** — ảnh bìa, tên lô, trạng thái kiểm chứng, mã lô, ngày
-   sản xuất, hạn dùng, mô tả, nơi sản xuất, dải ảnh sản phẩm.
-2. **Nguồn gốc** — sơ đồ quy trình bên trái, panel chi tiết bên phải.
-3. **Kiểm định chất lượng** — giấy chứng nhận và phiếu kiểm nghiệm, mở được ảnh
-   cỡ đầy đủ.
-
-Dưới ba mục là dải kiểm chứng: trạng thái, phiên bản, thời điểm công bố, mã giao
-dịch và liên kết mở giao dịch trên explorer của chuỗi.
-
-**Sơ đồ quy trình** vẽ bằng SVG sinh tại máy chủ (`worker/src/page/tree.ts`):
-thành phẩm trên cùng, các công đoạn ở xưởng đi xuống, rồi rẽ thành từng nhánh
-nguyên liệu, dưới cùng là dải vùng nguyên liệu. Chạm một ô thì panel bên phải mở
-đúng hồ sơ của ô đó — công đoạn thì có khối lượng vào/ra, tỷ lệ thu hồi, thời
-gian, người thực hiện, tham số và ảnh; nguyên liệu thì có ảnh vùng, nhà cung
-cấp, ngày thu hoạch, ngày nhập kho và danh sách công đoạn. Chỉ ô đang chọn được
-tô viền; đường đi từ thành phẩm xuống ô đó sáng lên.
-
-Phần kể chuyện thương hiệu thuộc về landing page riêng, không lặp ở đây.
-
-## Vùng nguyên liệu
-
-Bản đồ tile (MapLibre) đã gỡ khỏi dự án. Vùng nguyên liệu giờ là **một ảnh bản
-đồ hành chính của xã**, do người vận hành chụp và tải lên với vai trò
-`area_map`; trang khách hiện ảnh đó ngay đầu hồ sơ nguyên liệu.
-
-Trường `area_radius_km` đã bị bỏ (migration `0009_drop_area_radius.sql`). Giá
-trị trong đó là ước lượng lúc seed demo chứ không đo đạc, mà một con số không
-kiểm chứng được nằm cạnh dữ liệu đã neo lên chuỗi thì sớm muộn cũng có người đọc
-nó như số thật. Muốn nói chính xác hơn cấp xã thì phải có số từ nhà cung cấp,
-lúc đó dùng cột `area_geojson` để lưu đúng ranh giới.
-
-Toạ độ nằm trong snapshot đem đi băm, nên dời điểm sau khi công bố cũng làm
-trạng thái chuyển sang `DỮ LIỆU SAI LỆCH`.
-
-## Ảnh: nén lúc tải lên, không nén lúc phục vụ
-
-Ảnh được thu nhỏ và mã hoá lại **ngay trên trình duyệt trước khi gửi lên**, ra
-WebP (JPEG nếu trình duyệt không mã hoá được). Lý do phải làm ở đầu này: khoá R2
-là mã băm của chính nội dung file, và khoá đó nằm trong bản công bố đem đi băm —
-nén lại một tấm ảnh sau khi đã công bố là làm hỏng đúng bản đã ghi lên chuỗi.
-
-Mức nén theo vai trò ảnh nằm ở `lib/ui/media_manager.dart`. Đo trên bộ ảnh thật
-của lô TL-2026-002: 9,07 MB xuống 5,19 MB, riêng mấy tấm PNG giảm hơn 90%. Ảnh
-nào nén lại không nhẹ được ít nhất 12% thì giữ nguyên, vì đổi thêm một lần mất
-mát để lấy vài phần trăm dung lượng là lỗ.
-
-Ảnh của lô đã có sẵn thì nén lại bằng `python tools/reencode_media.py <mã lô>`:
-tải lên bản mới, xoá bản cũ, rồi công bố một phiên bản mới.
-
-## Tải trước ảnh của lô
-
-`web/index.html` hỏi hồ sơ lô ngay từ byte đầu của trang rồi chèn thẻ preload
-cho ảnh bìa và dải ảnh. Trước đó phải đợi engine khởi động xong mới có ai đi hỏi
-ảnh, đường mạng nằm không suốt quãng ấy. Đo trên máy thật: ảnh bắt đầu tải ở
-344 ms thay vì 1793 ms, và lượt tải sau đó của ứng dụng ăn cache chứ không tải
-lại.
-
-Font cắt gọn còn Latin + tiếng Việt, chuyển sang woff2 để ở `web/f/`, mỗi file
-13-20 KB. CSS nhúng thẳng trong HTML nên không tốn thêm vòng đi về nào.
-
-## Màn quản trị
-
-Rail trái chỉ còn hai mục: **Tổng quan** và **Lô sản phẩm**. Mọi việc của một lô
-nằm trong một màn làm việc duy nhất, mở ra khi bấm vào lô trong danh sách:
-
-1. **Thông tin lô** — tên, ngày sản xuất, hạn dùng, nơi sản xuất, toạ độ, mô tả.
-   Nút lưu chỉ sáng khi có thay đổi thật.
-2. **Ảnh và hồ sơ của lô** — ảnh bìa, ảnh sản phẩm, giấy chứng nhận, phiếu kiểm
-   nghiệm.
-3. **Nguyên liệu và công đoạn** — mỗi nguyên liệu là một thẻ mở ra được, bên
-   trong là vùng trồng, ảnh vùng, và từng công đoạn kèm ảnh của riêng nó.
-4. **Hoàn thành lô** — trạng thái toàn vẹn, nút hoàn thành (lần sau là "Lưu bản
-   mới"), lịch sử các bản đã lưu kèm tình trạng blockchain, và mã QR tải về dạng
-   PNG (nền trắng, 1024px, có mã lô ở dưới) để đưa thẳng sang bản in bao bì.
-
-Sửa dữ liệu sau khi công bố không bị chặn, nhưng trạng thái toàn vẹn sẽ chuyển
-sang `DỮ LIỆU SAI LỆCH` cho tới khi công bố phiên bản mới. Đó là cách duy nhất
-trung thực: giấu thay đổi đi mới là nói dối người quét mã.
-
-`Lô sản phẩm` có ô tìm theo mã hoặc tên, chọn thứ tự và phân trang 10 lô một
-trang, cả ba chạy ở D1 chứ không tải hết về rồi lọc ở client.
-
-Không có dòng chú thích nhỏ nào dưới tiêu đề khối hay dưới ô nhập. Người vận
-hành dùng màn này mỗi ngày, chú thích chỉ đúng ở lần đầu rồi thành nhiễu. Trạng
-thái lô nói bằng tiếng thường: `ĐANG TẠO` và `ĐÃ XONG`.
-
-## Nút "Hoàn thành lô" và blockchain
-
-Một lần bấm làm bốn việc: gom toàn bộ dữ liệu lô thành snapshot JSON canonical,
-băm SHA-256, lưu thành một phiên bản mới (không ghi đè), rồi gửi mã băm lên
-**VBSN Besu** qua hợp đồng `TuleTrace`
-(`0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca`, chainId 84001).
-
-Người vận hành không phải xác nhận ví: khoá của thương hiệu nằm trong secret
-`PRIVATE_KEY` của worker, worker ký và trả gas. Giao dịch gửi trong `waitUntil`
-nên không ai phải đứng chờ, và một cron 10 phút quét lại hàng chờ phòng khi mạng
-chập. Máy dev đặt `CHAIN_AUTO_ANCHOR=false` để chạy thử không bắn giao dịch thật.
-
-Hai điều kiện của mạng này, gặp lúc triển khai và đã xử lý trong mã:
-
-- **Máy ảo trước Shanghai.** Bytecode mặc định của solc 0.8.24 có opcode PUSH0
-  và node từ chối ngay ở bước ước lượng gas, nên `scripts/deploy-contract.mjs`
-  biên dịch với `evmVersion: 'paris'`.
-- **Giá gas phải hỏi node.** `baseFeePerGas` của mạng là 7 wei nhưng node chỉ
-  nhận giao dịch từ 0,1 gwei; viem nhìn baseFee rồi đặt trần 8 wei và mọi giao
-  dịch bị từ chối với một thông báo cụt lủn. `chain.ts` lấy thẳng `eth_gasPrice`
-  rồi cộng biên 25%.
-
-Kiểm chứng độc lập, không cần tin vào trang web:
-
-```bash
-cd worker
-node scripts/chain-verify.mjs 0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca <sha256>
-```
-
-Chữ ký trên chuỗi hiện là chữ ký của **thương hiệu**. Nó chứng minh dữ liệu
-không bị sửa sau khi chốt, chứ chưa chứng minh hợp tác xã đã giao hàng. Bước cho
-từng nhà cung cấp tự ký nằm ở [BLOCKCHAIN.md](BLOCKCHAIN.md).
-
-## Một luật của snapshot: trường rỗng thì không ghi
-
-Mã băm được tính lại từ dữ liệu hiện tại rồi so với bản đã công bố. Nghĩa là
-**đổi hình dạng payload trong code cũng làm mọi lô đã công bố hoá sai lệch**,
-kể cả lô không ai đụng vào — trang công khai lập tức báo `DỮ LIỆU SAI LỆCH`
-hàng loạt vì một lần sửa code, chứ không phải vì dữ liệu đổi.
-
-Nên khi thêm một trường vào snapshot: chỉ ghi khoá đó khi thật sự có dữ liệu.
-Lô chưa dùng tính năng mới vẫn băm ra đúng như cũ và giữ nguyên trạng thái.
-Smoke test giữ luật này: thêm một công đoạn xưởng thì lô phải lệch, xoá đi thì
-phải khớp lại mà không cần công bố lại.
-
-Khi buộc phải đổi hình dạng payload cho mọi lô, đó là một quyết định có giá:
-phải công bố lại toàn bộ và mỗi lô tốn một giao dịch mới trên chuỗi. Lần gần
-nhất là lúc bỏ trường bán kính vùng nguyên liệu.
-
-## Trang khách xem bản đã công bố, không xem dữ liệu đang sửa
-
-`GET /api/public/traces/:code` trả **nội dung của bản công bố gần nhất**, dựng
-lại từ payload đã lưu chứ không đọc dữ liệu sống. Người vận hành sửa dở một lô
-đã bán ngoài thị trường thì khách quét mã vẫn thấy bản đã chốt; nội dung mới chỉ
-ra mắt khi bấm "Lưu bản mới". Lô chưa công bố lần nào thì trả dữ liệu hiện tại
-kèm trạng thái `ĐANG TẠO`.
-
-Vì thế có hai câu hỏi kiểm chứng khác nhau, và hai đường trả lời:
-
-| Ai hỏi | Câu hỏi | Đường |
-| --- | --- | --- |
-| Khách quét QR | Bản tôi đang xem có đúng là bản đã ghi lên chuỗi không? | `GET /api/public/traces/:code/verify` |
-| Người vận hành | Dữ liệu tôi vừa sửa có khác bản đã lưu không? | `GET /api/admin/product-batches/:code/trace` |
-
-Trước đây cả hai dùng chung một phép so, nên mỗi lần admin sửa một dòng là trang
-khách hiện cảnh báo đỏ. Cảnh báo ấy phải để dành cho trường hợp thật sự đáng báo
-động, nếu không thì chẳng ai còn tin nó.
-
-## Sửa lô sau khi đã lên chuỗi
-
-Sửa được, và bản cũ không mất. Ba việc xảy ra cùng lúc:
-
-1. **Bản đã chốt còn nguyên.** `published_snapshots` giữ cả payload đầy đủ chứ
-   không chỉ mã băm, nên nội dung lô lúc đó vẫn đọc lại được. Trong màn quản trị,
-   mỗi dòng ở "Lịch sử" có nút mở lại nội dung bản ấy.
-2. **Giao dịch cũ vẫn nằm trên chuỗi.** Không ai xoá được, kể cả người có khoá.
-3. **Trang công khai không đổi gì cả**: khách vẫn xem bản đã công bố. Chỉ màn
-   quản trị hiện "Có thay đổi chưa lưu" kèm số hiệu bản mà khách đang thấy.
-
-Ảnh cũng vậy: gỡ một ảnh khỏi lô thì bản ghi biến mất khỏi lô, nhưng file trong
-R2 được giữ lại nếu còn bản đã công bố nào trỏ tới nó. Khoá R2 nằm trong snapshot
-đem đi băm, xoá file là làm hỏng chính bản đã ghi lên chuỗi.
-
-**Cái chưa có**: nhật ký từng lần sửa giữa hai lần chốt. Hệ thống ghi lại các
-**bản đã chốt**, không ghi "14:03 ai đó đổi ngày sản xuất". Với một token quản
-trị dùng chung thì nhật ký ấy cũng chỉ ghi được "admin", nên nó chỉ đáng làm
-cùng lúc với tài khoản riêng cho từng người vận hành.
-
-## Media
-
-Ảnh, video và hồ sơ kiểm nghiệm nằm trong R2, khoá lưu trữ là
-`media/<sha256 của nội dung>.<ext>`. Ba hệ quả:
-
-- Tải lại đúng file cũ thì dùng chung một object, không tốn thêm dung lượng.
-- Nội dung không bao giờ đổi theo một khoá, nên cache được vĩnh viễn.
-- Khoá nằm trong snapshot đem đi băm, nên tráo ảnh sau khi công bố cũng bị bắt
-  như tráo chữ.
-
-`role` quyết định chỗ hiển thị:
-
-| role | Hiện ở đâu |
-| --- | --- |
-| `cover` | Ảnh lớn của mục Thông tin chung |
-| `gallery` | Dải ảnh sản phẩm, ảnh của nguyên liệu, ảnh của công đoạn |
-| `area_map` | Ảnh vùng nguyên liệu, ngay đầu hồ sơ nguyên liệu |
-| `certificate` | Mục Kiểm định, kèm loại, số hiệu, hạn hiệu lực |
-| `lab_report` | Mục Kiểm định |
-
-## Công cụ
-
-Tất cả đi qua API quản trị chứ không đụng thẳng database, nên mọi kiểm tra đầu
-vào vẫn chạy và lô mới có mã băm cùng giao dịch của riêng nó.
-
-| Lệnh | Việc |
-| --- | --- |
-| `python tools/clone_batch.py <nguồn> <đích> --shift <ngày>` | Nhân một lô đầy đủ dữ liệu thành lô khác, dời ngày tháng |
-| `python tools/sync_ingredient_media.py <nguồn> <đích...>` | Đồng bộ ảnh của nguyên liệu giữa các lô |
-| `python tools/reencode_media.py <mã lô>` | Nén lại ảnh của một lô sang WebP rồi công bố |
-| `python tools/make_slides.py` | Sinh bộ slide trình bày |
-| `python tools/build_fonts.py <thư mục ttf>` | Cắt gọn font còn Latin + tiếng Việt |
-| `node worker/scripts/chain-status.mjs` | Ví, số dư, khối hiện tại |
-| `node worker/scripts/chain-verify.mjs <contract> <sha256>` | Đọc ngược từ chuỗi xem mã băm có thật không |
-| `node worker/scripts/deploy-contract.mjs` | Biên dịch và triển khai hợp đồng |
-
-## Cấu trúc mã nguồn
-
-```text
-worker/
-  src/
-    index.ts      Hono routes: API, và hai route dựng trang (/ và /t/:code)
-    trace.ts      tầng D1, snapshot, hàng chờ neo chuỗi
-    chain.ts      ký và gửi giao dịch, đọc trạng thái ví
-    media.ts      tải lên R2, kiểm định dạng, xoá an toàn
-    canonical.ts  JSON chuẩn hoá và SHA-256
-    page/         dựng HTML trang tra cứu: khung, ba mục, sơ đồ SVG, CSS, JS
-  migrations/     thay đổi lược đồ theo thời gian
-  scripts/        smoke test, công cụ chuỗi, chép lô
-lib/              Flutter: màn quản trị (và bản explorer cũ, giữ cho app sau này)
-functions/        Pages Functions: chuyển tiếp về Worker
-web/              index.html, script nén ảnh và quét QR, font cùng ảnh tĩnh ở web/f
-tools/            công cụ Python: seed, nhân lô, nén ảnh, slide, font
-tai-lieu/         tài liệu cho khách và người vận hành
-```
-
-## Quan hệ với landing page
-
-`smartbreakfast.store` là landing page (repo riêng), `trace.smartbreakfast.store`
-là hệ thống này. Thanh điều hướng hai bên dùng chung bảng màu, cùng bộ mục và
-cùng logo, để người quét mã không thấy mình vừa rơi sang một website khác. Màu
-và số đo lấy đúng từ `assets/css/style.css` của landing, ghi lại trong
-`worker/src/page/theme.ts` và `lib/ui/tule_theme.dart`.
+Khoá ký giao dịch (`PRIVATE_KEY`) và token quản trị (`ADMIN_TOKEN`) **không nằm
+trong repo**. Production đặt bằng `wrangler secret put`; máy local để ở
+`worker/.dev.vars` (đã gitignore). File `worker/.dev.vars.example` chỉ chứa giá
+trị mẫu.

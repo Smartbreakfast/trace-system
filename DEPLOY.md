@@ -181,7 +181,7 @@ curl -sS -o /dev/null -w "%{http_code}
 curl -s https://trace.smartbreakfast.store/api/health
 ```
 
-Chi tiết bàn giao giữa hai bên: `tai-lieu/Ket-noi-trace.smartbreakfast.store.pdf`.
+Bản gửi cho người quản lý tên miền: `tai-lieu/BAN_GHI_TRACE_domain_setup.md`.
 
 ## 4. Chạy local
 
