@@ -1,0 +1,10 @@
+# Copy thành .dev.vars để chạy local.
+# Production dùng: wrangler secret put ADMIN_TOKEN
+ADMIN_TOKEN=dev-token-tule
+
+# Khoá ký giao dịch trên VBSN Besu (chainId 84001). Production dùng: wrangler secret put PRIVATE_KEY
+PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000000
+
+# Máy dev để false thì chạy thử và smoke test không bắn giao dịch thật lên
+# chuỗi; nút "Gửi lên chuỗi" trong màn quản trị vẫn dùng được.
+CHAIN_AUTO_ANCHOR=false

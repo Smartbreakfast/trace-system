@@ -1,0 +1,7 @@
+# Engine CanvasKit: cùng một file cho mọi bản deploy của cùng phiên bản Flutter,
+# mà Pages lại trả max-age=0 nên nó không nằm lại ở biên và không nằm lại trong
+# máy người xem. 2,85MB tải lại mỗi lần vào là khoản nặng nhất của trang.
+/canvaskit/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# Ảnh và file trong R2 đi qua worker, worker tự đặt header immutable của nó.

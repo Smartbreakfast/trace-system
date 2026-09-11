@@ -1,0 +1,64 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tule-trace",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Bật địa chỉ miễn phí tule-trace.<subdomain>.workers.dev để chạy thử trước
+  // khi mua tên miền. Giữ bật cả sau khi có domain riêng: mọi mã QR đã in theo
+  // địa chỉ workers.dev vẫn phải mở được.
+  "workers_dev": true,
+
+  // Worker phục vụ luôn bản build Flutter Web, nên API và trang web cùng một
+  // origin: không CORS, và mã QR có đường dẫn sạch dạng /t/TL-2026-001.
+  // `run_worker_first` giữ cho /api/* không bị SPA fallback nuốt mất.
+  "assets": {
+    "directory": "../build/web",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Trang tra cứu và trang chủ do worker dựng, không phải file tĩnh của
+    // Flutter. Màn quản trị (/admin) thì vẫn là bản Flutter trong assets.
+    "run_worker_first": ["/api/*", "/", "/t/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tule-trace",
+      // Thay bằng id thật sau khi chạy: wrangler d1 create tule-trace
+      "database_id": "6827eb5d-46b6-4723-8fed-6245e3164382"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "tule-trace-media"
+    }
+  ],
+
+  "vars": {
+    // Giới hạn kích thước một file tải lên, tính bằng byte.
+    "MAX_UPLOAD_BYTES": "31457280",
+
+    // VBSN Besu. Khoá ký nằm ở secret PRIVATE_KEY, không để ở đây.
+    "CHAIN_RPC_URL": "https://besu-rpc.vbsn.vn",
+    "CHAIN_ID": "84001",
+    "CHAIN_EXPLORER": "https://besu-explorer.vbsn.vn",
+    "TRACE_CONTRACT": "0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca",
+
+    // Neo tự động sau mỗi lần hoàn thành lô. Đặt "false" ở môi trường thử để
+    // test không bắn giao dịch thật lên chuỗi.
+    "CHAIN_AUTO_ANCHOR": "true"
+  },
+
+  // Lưới đỡ cho hàng chờ ghi chuỗi: quét lại mỗi 10 phút phòng khi lúc công bố
+  // mạng chập.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

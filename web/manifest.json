@@ -1,0 +1,37 @@
+{
+    "name": "Tú Lệ Trace",
+    "short_name": "Tú Lệ Trace",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F7F5ED",
+    "theme_color": "#19362B",
+    "description": "Truy xuất nguồn gốc và kiểm chứng tính toàn vẹn dữ liệu cho bột ngũ cốc Tú Lệ Smart Breakfast.",
+    "lang": "vi",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "categories": ["food", "utilities"],
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

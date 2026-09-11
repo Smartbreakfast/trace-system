@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Truy xuất nguồn gốc bột ngũ cốc Tú Lệ Smart Breakfast: bốn nguyên liệu bản địa, từng công đoạn và mã băm kiểm chứng dữ liệu.">
+  <meta name="theme-color" content="#19362B">
+
+  <!-- Người quét QR hay chia sẻ lại liên kết lô, nên cần thẻ mạng xã hội. -->
+  <meta property="og:title" content="Tú Lệ Trace">
+  <meta property="og:description" content="Xem hành trình từng thành phần trong một gói ngũ cốc từ nông sản bản địa.">
+  <meta property="og:type" content="website">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tú Lệ Trace">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Tú Lệ Trace | Truy xuất nguồn gốc</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script src="qr-scan.js" defer></script>
+  <script src="image-shrink.js" defer></script>
+
+  <!--
+    Tải trước ảnh của lô. Engine Flutter mất khoảng 1,5 giây để khởi động, và
+    trước đây mãi tới lúc đó mới có ai đi hỏi ảnh; đường mạng nằm không suốt
+    quãng ấy. Đoạn này hỏi hồ sơ ngay từ byte đầu của trang, nên khi khung
+    hình đầu tiên vẽ ra thì ảnh đã nằm sẵn trong cache của trình duyệt.
+
+    Hỏng thì thôi, trang vẫn chạy y như cũ: đây chỉ là chạy trước một việc mà
+    app sẽ tự làm.
+  -->
+  <script>
+    (function () {
+      var match = location.pathname.match(/\/t\/([^\/?#]+)/);
+      if (!match || !window.fetch) return;
+
+      fetch('/api/public/traces/' + encodeURIComponent(match[1]))
+        .then(function (response) {
+          return response.ok ? response.json() : null;
+        })
+        .then(function (data) {
+          if (!data || !data.media) return;
+          // Đúng những tấm mục "Thông tin chung" hiện ngay: ảnh bìa và dải ảnh
+          // sản phẩm. Ảnh của mục khác để app tự tải khi người xem mở tới,
+          // tải trước tất cả là ngốn băng thông của người không xem.
+          var wanted = data.media
+            .filter(function (item) {
+              return item.kind === 'image' &&
+                (item.role === 'cover' || item.role === 'gallery');
+            })
+            .slice(0, 4);
+          wanted.forEach(function (item, index) {
+            var link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = item.url;
+            if (index === 0) link.setAttribute('fetchpriority', 'high');
+            document.head.appendChild(link);
+          });
+        })
+        .catch(function () {});
+    })();
+  </script>
+
+  <style>
+    /*
+      Flutter web mất vài giây để tải engine. Không có màn chờ thì người quét QR
+      chỉ thấy một trang trắng và dễ nghĩ là link hỏng.
+    */
+    html, body { margin: 0; padding: 0; height: 100%; background: #F7F5ED; }
+    #boot {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: #19362B; background: #F7F5ED; transition: opacity .35s ease;
+    }
+    #boot .mark {
+      font-weight: 800; letter-spacing: 3px; font-size: 15px;
+    }
+    #boot .sub { font-size: 13px; color: #5A6560; }
+    #boot .bar {
+      width: 148px; height: 3px; border-radius: 99px; overflow: hidden;
+      background: rgba(25, 54, 43, .12);
+    }
+    #boot .bar span {
+      display: block; width: 40%; height: 100%; border-radius: 99px;
+      background: #D9743B; animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(280%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #boot .bar span { animation: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot" role="status" aria-live="polite">
+    <div class="mark">TÚ LỆ TRACE</div>
+    <div class="bar"><span></span></div>
+    <div class="sub">Đang mở hồ sơ truy xuất</div>
+  </div>
+
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('boot');
+      if (!boot) return;
+      boot.style.opacity = '0';
+      setTimeout(function () { boot.remove(); }, 350);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

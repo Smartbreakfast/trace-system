@@ -1,0 +1,32 @@
+{
+  "name": "tule-trace-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build:web": "cd .. && flutter build web --pwa-strategy=none --no-web-resources-cdn",
+    "start": "npm run build:web && wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "chain:deploy": "node scripts/deploy-contract.mjs",
+    "chain:status": "node scripts/chain-status.mjs",
+    "db:local": "wrangler d1 execute tule-trace --local --file=./schema.sql",
+    "db:seed:local": "wrangler d1 execute tule-trace --local --file=./seed.sql",
+    "db:migrate:local": "wrangler d1 execute tule-trace --local --file=./migrations/0001_locations.sql && wrangler d1 execute tule-trace --local --file=./migrations/0002_area.sql && wrangler d1 execute tule-trace --local --file=./migrations/0003_area_polygon.sql && wrangler d1 execute tule-trace --local --file=./migrations/0004_process_from_spec.sql && wrangler d1 execute tule-trace --local --file=./migrations/0005_chain_outbox.sql && wrangler d1 execute tule-trace --local --file=./migrations/0006_batch_events.sql",
+    "db:remote": "wrangler d1 execute tule-trace --remote --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute tule-trace --remote --file=./migrations/0001_locations.sql && wrangler d1 execute tule-trace --remote --file=./migrations/0002_area.sql && wrangler d1 execute tule-trace --remote --file=./migrations/0003_area_polygon.sql && wrangler d1 execute tule-trace --remote --file=./migrations/0004_process_from_spec.sql && wrangler d1 execute tule-trace --remote --file=./migrations/0005_chain_outbox.sql && wrangler d1 execute tule-trace --remote --file=./migrations/0006_batch_events.sql",
+    "db:seed:remote": "wrangler d1 execute tule-trace --remote --file=./seed.sql",
+    "test:api": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "hono": "^4.13.7",
+    "viem": "^2.56.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260906.1",
+    "solc": "^0.8.36",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.129.0"
+  }
+}

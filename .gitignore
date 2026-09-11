@@ -1,0 +1,67 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Cloudflare worker
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
+
+# Khoá ký giao dịch: không bao giờ vào git.
+.env
+.env.*
+!.env.example
+
+# Tài liệu nguồn và ảnh gốc: nặng, không cần cho việc build.
+# Ảnh đã tối ưu nằm trong assets/, cách dựng lại xem tools/.
+docs/
+icon/
+
+# Cache cua wrangler o thu muc goc (id tai khoan, danh sach project)
+.wrangler/
+
+# Bo slide trinh bay: file nang, sinh lai duoc bang tools/make_slides.py, va
+# ban dang gui khach thi sua tay nen khong hop de trong repo.
+tai-lieu/*.pptx
