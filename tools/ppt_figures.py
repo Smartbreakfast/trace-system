@@ -5,6 +5,11 @@ import io
 import os
 
 from PIL import Image, ImageDraw, ImageFont
+import os, sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'docs', 'ppt-ky-thuat')
+os.makedirs(OUT, exist_ok=True)
 
 FONTS = 'C:/Users/sontm/coded/com-tule/assets/fonts/'
 INK = (23, 53, 41)
@@ -66,7 +71,7 @@ def van_tay():
 
     d.text((60, 1010), 'Đổi một ký tự thì vân tay khác hoàn toàn — đó là cách máy biết hồ sơ có bị sửa hay không.',
            font=SEMI(32), fill=INK)
-    img.save('ppt/fig-van-tay.png')
+    img.save(os.path.join(OUT, 'fig-van-tay.png'))
     print('fig-van-tay.png')
 
 
@@ -101,7 +106,7 @@ def toc_do():
     rounded(d, (1040, y + 60, 1980, y + 170), 22, CREAM, LINE, 3)
     d.text((1080, y + 92), '202 KB', font=BOLD(52), fill=GREEN)
     d.text((1330, y + 104), 'bản mới — nhẹ hơn 16 lần', font=REG(32), fill=MUTED)
-    img.save('ppt/fig-toc-do.png')
+    img.save(os.path.join(OUT, 'fig-toc-do.png'))
     print('fig-toc-do.png')
 
 

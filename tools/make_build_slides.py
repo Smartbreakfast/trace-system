@@ -223,8 +223,8 @@ def s_cover():
 def s_pham_vi():
     s = slide()
     y = head(s, 'Phạm vi', 'Hai sản phẩm, hai bài toán khác nhau',
-             'Cùng một thương hiệu nhưng yêu cầu kỹ thuật ngược nhau, nên tách hẳn hai hệ '
-             'thống thay vì nhồi chung một ứng dụng.')
+             'Cùng một thương hiệu nhưng hai nhóm yêu cầu kỹ thuật khác nhau, nên triển khai '
+             'thành hai hệ thống riêng.')
     w = (CW - Inches(0.4)) / 2
     card(s, ML, y, w, Inches(3.5), 'Landing page — smartbreakfast.store', [
         'Mục tiêu: giới thiệu sản phẩm, dẫn khách tới nơi mua.',
@@ -260,11 +260,11 @@ def s_nghiep_vu():
               row_h=Inches(0.66))
     y += Inches(0.18)
     w = (CW - Inches(0.4)) / 2
-    card(s, ML, y, w, Inches(1.42), 'Yêu cầu phi chức năng', [
+    card(s, ML, y, w, Inches(1.65), 'Yêu cầu phi chức năng', [
         'Toàn vẹn: phát hiện mọi thay đổi sau khi công bố.',
         'Chi phí gần bằng 0 khi không có lượt quét; không máy chủ phải trực.',
     ], size=14)
-    card(s, ML + w + Inches(0.4), y, w, Inches(1.42), 'Ngoài phạm vi bản này', [
+    card(s, ML + w + Inches(0.4), y, w, Inches(1.65), 'Ngoài phạm vi bản này', [
         'Thanh toán và giỏ hàng — thuộc landing page.',
         'Tài khoản riêng cho từng nhân sự, chữ ký riêng của nhà cung cấp — ở lộ trình.',
     ], tint=BG, edge=LINE, size=14)
@@ -273,8 +273,8 @@ def s_nghiep_vu():
 def s_quy_trinh():
     s = slide()
     y = head(s, 'Phân tích nghiệp vụ', 'Từ quy trình sản xuất thật tới mô hình dữ liệu',
-             'Đọc thuyết minh quy trình của nhà sản xuất, tách ra bốn nhánh nguyên liệu và '
-             'các công đoạn, rồi soi xem mô hình dữ liệu còn thiếu gì.')
+             'Nhóm đọc thuyết minh quy trình của nhà sản xuất, tách thành bốn nhánh nguyên '
+             'liệu và các công đoạn, rồi đối chiếu với mô hình dữ liệu đang có.')
     rows = [
         ['Trong quy trình thật', 'Phải có trong dữ liệu', 'Vì sao'],
         ['Bốn nguyên liệu đi bốn nhánh riêng rồi mới phối trộn',
@@ -282,13 +282,13 @@ def s_quy_trinh():
          'Truy ngược từ thành phẩm về từng vùng trồng'],
         ['Mỗi công đoạn có khối lượng vào và ra',
          'input_quantity, output_quantity, quantity_unit',
-         'Cân bằng khối lượng là chỗ truy xuất giả bị lộ'],
+         'Cho phép kiểm tra cân bằng khối lượng giữa các công đoạn'],
         ['Công đoạn có tham số kỹ thuật (nhiệt độ sấy, thời gian ngâm)',
          'params dạng JSON',
-         'Đoàn kiểm tra hỏi đúng những con số này'],
+         'Phục vụ đối chiếu điều kiện chế biến khi kiểm tra'],
         ['Người trực tiếp làm từng công đoạn',
          'operator',
-         'Quy trách nhiệm tới người, không dừng ở "bộ phận"'],
+         'Ghi nhận trách nhiệm ở mức cá nhân'],
     ]
     table(s, rows, ML, y, CW, [Inches(4.5), Inches(4.0), CW - Inches(8.5)],
           row_h=Inches(0.66))
@@ -305,9 +305,9 @@ def s_mo_hinh():
 # =========================================================== B. landing
 def s_landing_kt():
     s = slide()
-    y = head(s, 'Landing page', 'Chọn kỹ thuật theo yêu cầu, không theo thói quen',
-             'Trang giới thiệu không có dữ liệu động. Mọi framework thêm vào chỉ làm chậm '
-             'lượt tải đầu và thêm một bước build.')
+    y = head(s, 'Landing page', 'Yêu cầu và lựa chọn kỹ thuật',
+             'Trang giới thiệu không có dữ liệu động; mỗi framework thêm vào đều làm tăng '
+             'dung lượng tải lần đầu và thêm một bước build.')
     rows = [
         ['Hạng mục', 'Lựa chọn', 'Lý do'],
         ['Giao diện', 'HTML, CSS, JavaScript thuần', 'Không build step; sửa file là thấy ngay'],
@@ -317,7 +317,7 @@ def s_landing_kt():
         ['SEO', 'sitemap.xml, robots.txt, thẻ Open Graph', 'Google đọc được, chia sẻ Zalo/Facebook có ảnh'],
     ]
     y2 = table(s, rows, ML, y, Inches(7.4), [Inches(1.7), Inches(2.5), Inches(3.2)],
-               row_h=Inches(0.52))
+               row_h=Inches(0.62))
     shot(s, 'l1-landing-home.png', y, max_w=Inches(4.7), max_h=Inches(3.6),
          left=int(ML + Inches(7.8)))
     footer(s, '43 file, 6 MB, không có node_modules trong sản phẩm cuối.')
@@ -325,7 +325,7 @@ def s_landing_kt():
 
 def s_landing_code():
     s = slide()
-    y = head(s, 'Landing page', 'Hai file quyết định toàn bộ hành vi')
+    y = head(s, 'Landing page', 'Cấu hình phục vụ và hệ thống thiết kế')
     shot(s, 'code-landing-worker.png', y, max_w=Inches(6.0), max_h=Inches(2.9), left=int(ML))
     shot(s, 'code-landing-css.png', y, max_w=Inches(6.0), max_h=Inches(2.9),
          left=int(ML + Inches(6.3)))
@@ -333,8 +333,8 @@ def s_landing_code():
     w = (CW - Inches(0.4)) / 2
     card(s, ML, y2, w, Inches(1.5), 'src/index.js — 25 dòng', [
         'Worker chỉ làm hai việc chuyển hướng rồi trả phần còn lại cho assets.',
-        'Đặt trong repo thay vì cấu hình trên dashboard: deploy một lệnh, và ai đọc repo '
-        'cũng thấy hành vi thật.',
+        'Cấu hình nằm trong repo thay vì trên dashboard, nên deploy bằng một lệnh và '
+        'lịch sử thay đổi nằm trong git.',
     ])
     card(s, ML + w + Inches(0.4), y2, w, Inches(1.5), 'style.css — hệ thống thiết kế', [
         'Toàn bộ màu, cỡ chữ, khoảng cách khai báo thành biến CSS ở :root.',
@@ -363,7 +363,7 @@ def s_kien_truc():
     s = slide()
     y = head(s, 'Hệ truy xuất', 'Sơ đồ thành phần')
     shot(s, 'dg-thanh-phan.png', y, max_h=Inches(4.7))
-    footer(s, 'Một Worker phục vụ cả API lẫn HTML. Pages đứng ra nhận tên miền vì zone nằm ở tài khoản Cloudflare khác.')
+    footer(s, 'Một Worker phục vụ cả API lẫn HTML; Pages đứng trước để nhận tên miền tuỳ chỉnh.')
 
 
 def s_bp_du_lieu():
@@ -373,8 +373,8 @@ def s_bp_du_lieu():
              'local lẫn production, không sửa tay bảng đang chạy.')
     shot(s, 'code-schema.png', y, max_w=Inches(7.3), max_h=Inches(3.2), left=int(ML))
     card(s, ML + Inches(7.6), y, CW - Inches(7.6), Inches(3.2), 'Quyết định thiết kế', [
-        'Ngày tháng lưu dạng chuỗi dd.MM.yyyy đúng như người vận hành nhập, '
-        'không đổi sang timestamp: hồ sơ phải đọc lại được y như lúc khai.',
+        'Ngày tháng lưu dạng chuỗi dd.MM.yyyy đúng như người vận hành nhập, không đổi '
+        'sang timestamp để giữ nguyên dữ liệu gốc.',
         'status chỉ có DRAFT và PUBLISHED; mọi trạng thái khác suy ra từ '
         'published_snapshots.',
         '9 migration tính tới hiện tại, gần nhất là bỏ cột bán kính vùng trồng.',
@@ -404,13 +404,13 @@ def s_bp_api():
 def s_bp_toan_ven():
     s = slide()
     y = head(s, 'Bộ phận 3 — Tầng toàn vẹn', 'Chuẩn hoá JSON rồi băm SHA-256',
-             'Đây là bộ phận quyết định giá trị của cả hệ thống: nếu hai lần băm cùng một '
-             'hồ sơ ra hai kết quả khác nhau thì mọi kiểm chứng đều vô nghĩa.')
+             'Yêu cầu: cùng một hồ sơ phải luôn cho ra cùng một mã băm, không phụ thuộc '
+             'thứ tự đọc dữ liệu hay môi trường chạy.')
     shot(s, 'code-hash.png', y, max_w=Inches(7.3), max_h=Inches(3.1), left=int(ML))
     card(s, ML + Inches(7.6), y, CW - Inches(7.6), Inches(3.1), 'Ba điều kiện', [
         'Khoá sắp theo bảng chữ cái, chuỗi chuẩn hoá Unicode NFC.',
-        'Trường rỗng bị loại khỏi payload, nếu không thì thêm một tính năng mới là '
-        'làm sai lệch mọi lô đã công bố.',
+        'Trường rỗng bị loại khỏi payload, để bổ sung trường mới không làm đổi mã băm '
+        'của các lô đã công bố.',
         'Payload lưu đầy đủ chứ không chỉ mã băm, để dựng lại được nội dung bản cũ.',
     ], size=14)
 
@@ -454,21 +454,35 @@ def s_chain_bay():
         'Xử lý: đọc eth_gasPrice rồi cộng biên 25% trước khi ký.',
     ], tint=GREEN_SOFT, edge=GREEN_EDGE, title_color=RGBColor(0x2C, 0x6B, 0x3F))
     text(s, ML, y + Inches(3.45), CW, Inches(0.7),
-         [('Cả hai lỗi đều không đọc được từ thông báo trả về. Cách tìm ra: viết một script '
-           'nhỏ gọi thẳng RPC, in ra baseFeePerGas, gasPrice và nonce thật của ví.',
+         [('Thông báo lỗi từ RPC không nêu nguyên nhân. Nhóm xác định bằng một script gọi '
+           'trực tiếp RPC để đọc baseFeePerGas, gasPrice và nonce của ví.',
            dict(size=16, color=INK_SOFT, line=1.35))])
+
+
+def s_hop_dong():
+    s = slide()
+    y = head(s, 'Bộ phận 4 — Tích hợp blockchain', 'Hợp đồng TuleTrace: chỉ phát sự kiện',
+             'Hợp đồng không lưu nội dung hồ sơ. Nó khai báo ba sự kiện và một sổ vai trò, '
+             'phần còn lại nằm ở D1 và R2.')
+    shot(s, 'v2-code-contract.png', y, max_w=Inches(7.4), max_h=Inches(3.3), left=int(ML))
+    card(s, ML + Inches(7.7), y, CW - Inches(7.7), Inches(3.3), 'Ba sự kiện', [
+        'BatchAnchored — mã băm của lô thành phẩm, mã lô, số phiên bản, mốc thời gian.',
+        'IngredientAnchored — dành cho bước nhà cung cấp tự ký.',
+        'ActorSet — sổ vai trò: SUPPLIER, PACKAGER, BRAND.',
+    ], size=14)
+    footer(s, 'contracts/TuleTrace.sol · Solidity 0.8.24, biên dịch evmVersion "paris", triển khai một lần bằng scripts/deploy-contract.mjs.')
 
 
 def s_bp_media():
     s = slide()
-    y = head(s, 'Bộ phận 5 — Tệp minh chứng', 'R2 với khoá theo nội dung, nén ở phía trình duyệt')
-    shot(s, 'code-anh.png', y, max_w=Inches(7.0), max_h=Inches(2.9), left=int(ML))
-    card(s, ML + Inches(7.3), y, CW - Inches(7.3), Inches(2.9), 'Vì sao nén lúc tải lên', [
+    y = head(s, 'Bộ phận 5 — Tệp minh chứng', 'R2 khoá theo nội dung, nén ở trình duyệt')
+    shot(s, 'code-anh.png', y, max_w=Inches(7.0), max_h=Inches(2.5), left=int(ML))
+    card(s, ML + Inches(7.3), y, CW - Inches(7.3), Inches(2.5), 'Vì sao nén lúc tải lên', [
         'Khoá R2 là sha256 của chính tệp, và khoá đó nằm trong payload đem đi băm.',
         'Nén lại sau khi công bố là làm sai lệch bản đã neo lên chuỗi.',
         'Nén trước khi gửi thì tệp được băm chính là tệp được phục vụ.',
     ], size=14)
-    y2 = y + Inches(3.1)
+    y2 = y + Inches(2.7)
     rows = [
         ['role', 'Hiển thị ở', 'Mức nén'],
         ['cover', 'Ảnh lớn mục Thông tin chung', '1400px, chất lượng 0,82'],
@@ -477,24 +491,39 @@ def s_bp_media():
         ['certificate / lab_report', 'Mục Kiểm định chất lượng', '2000px, chất lượng 0,86'],
     ]
     table(s, rows, ML, y2, Inches(11.2), [Inches(3.2), Inches(4.6), Inches(3.4)],
-          row_h=Inches(0.42))
+          row_h=Inches(0.38))
     footer(s, 'Đo trên bộ ảnh thật của một lô: 9,07 MB xuống 5,19 MB. Ảnh nào nén lại không nhẹ hơn 12% thì giữ nguyên bản gốc.')
 
 
 def s_bp_ssr():
     s = slide()
-    y = head(s, 'Bộ phận 6 — Trang truy xuất', 'HTML dựng tại máy chủ, JavaScript chỉ là lớp phủ',
+    y = head(s, 'Bộ phận 6 — Trang truy xuất', 'Trang truy xuất dựng HTML tại máy chủ',
              'Toàn bộ nội dung nằm trong HTML trả về từ Worker. Tắt JavaScript thì vẫn đổi '
              'mục được bằng liên kết, vẫn mở được chi tiết công đoạn bằng :target.')
-    shot(s, 'p3-so-do.png', y, max_w=Inches(6.6), max_h=Inches(3.2), left=int(ML))
-    shot(s, 'code-tree.png', y, max_w=Inches(5.2), max_h=Inches(3.2),
+    shot(s, 'p3-so-do.png', y, max_w=Inches(6.6), max_h=Inches(2.9), left=int(ML))
+    shot(s, 'code-tree.png', y, max_w=Inches(5.2), max_h=Inches(2.9),
          left=int(ML + Inches(6.9)))
-    y2 = y + Inches(3.35)
+    y2 = y + Inches(3.05)
     text(s, ML, y2, CW, Inches(0.8),
-         [('Sơ đồ quy trình là SVG sinh ngay tại máy chủ từ danh sách công đoạn: không thư viện '
-           'vẽ đồ thị, không canvas, và bấm được cả khi không có JavaScript.',
+         [('Sơ đồ quy trình là SVG sinh tại máy chủ từ danh sách công đoạn: không dùng thư viện '
+           'vẽ đồ thị, không canvas, và bấm chọn được cả khi tắt JavaScript.',
            dict(size=16, color=INK_SOFT, line=1.35))])
     footer(s, 'worker/src/page/ — shell.ts, theme.ts, tree.ts, trace-page.ts, client.ts.')
+
+
+def s_toi_uu_tai():
+    s = slide()
+    y = head(s, 'Bộ phận 6 — Trang truy xuất', 'Tối ưu lượt tải đầu tiên',
+             'Ảnh của lô được yêu cầu ngay trong thẻ script ở đầu trang, không đợi phần còn '
+             'lại của trang chạy xong.')
+    shot(s, 'v1-code-index.png', y, max_w=Inches(7.6), max_h=Inches(3.3), left=int(ML))
+    card(s, ML + Inches(7.9), y, CW - Inches(7.9), Inches(3.3), 'Kết quả đo', [
+        'Ảnh bắt đầu tải ở 344 ms thay vì 1793 ms.',
+        'Lượt tải sau đó của trang dùng lại bản trong cache, không tải lần hai.',
+        'Font cắt gọn còn Latin + tiếng Việt, chuyển sang woff2, mỗi file 13-20 KB.',
+        'CSS nhúng thẳng trong HTML, không thêm vòng đi về.',
+    ], size=14)
+    footer(s, 'web/index.html — đoạn script chạy trước, đọc hồ sơ lô rồi chèn thẻ preload cho ảnh bìa và dải ảnh.')
 
 
 def s_bp_admin():
@@ -509,33 +538,34 @@ def s_bp_admin():
            'công đoạn → hoàn thành lô. Khối cuối hiện trạng thái toàn vẹn, mã băm, lịch sử các '
            'bản đã công bố kèm tình trạng giao dịch, và mã QR tải về dạng PNG cho bản in bao bì.',
            dict(size=16, color=INK_SOFT, line=1.35))])
-    footer(s, 'Giữ Flutter ở đây vì màn này tải một lần rồi nằm trong cache, và dùng lại được khi làm ứng dụng di động.')
+    footer(s, 'Màn quản trị giữ Flutter: tải một lần rồi nằm trong cache trình duyệt, và dùng lại được khi phát triển ứng dụng di động.')
 
 
 def s_bp_ha_tang():
     s = slide()
-    y = head(s, 'Bộ phận 8 — Hạ tầng và triển khai', 'Tên miền nằm ở tài khoản Cloudflare khác',
-             'Zone smartbreakfast.store thuộc tài khoản của đối tác. Workers Custom Domain '
-             'đòi zone cùng tài khoản, nên phải đổi cách ghép.')
+    y = head(s, 'Bộ phận 8 — Hạ tầng và triển khai', 'Một lệnh build, hai lệnh deploy',
+             'Không có máy chủ phải cài đặt hay trực. Cấu hình nằm trong repo dưới dạng file.')
     rows = [
-        ['Cách làm', 'Kết quả'],
-        ['Workers Custom Domain', 'Không dùng được: Cloudflare đòi zone cùng tài khoản'],
-        ['Uỷ quyền subdomain bằng bản ghi NS', 'Không dùng được: chỉ mở cho gói Enterprise'],
-        ['Cloudflare Pages nhận subdomain', 'Dùng được: Pages cho phép subdomain của zone ở tài khoản khác'],
+        ['Thành phần', 'Cấu hình', 'Ghi chú'],
+        ['Trang truy xuất + API', 'wrangler deploy', 'Worker mang theo D1, R2, biến môi trường, cron'],
+        ['Bản build Flutter', 'flutter build web --pwa-strategy=none', 'Phục vụ ở /admin'],
+        ['Tên miền', 'CNAME trace → Pages, DNS only', 'Pages chuyển tiếp /, /t/* và /api/* về Worker'],
+        ['Tác vụ định kỳ', 'cron "*/10 * * * *"', 'Quét lại hàng chờ neo chuỗi khi mạng chập'],
     ]
-    y2 = table(s, rows, ML, y, Inches(11.4), [Inches(4.4), Inches(7.0)], row_h=Inches(0.5))
-    y2 += Inches(0.25)
+    y2 = table(s, rows, ML, y, Inches(11.5), [Inches(3.0), Inches(3.8), Inches(4.7)],
+               row_h=Inches(0.46))
+    y2 += Inches(0.24)
     w = (CW - Inches(0.4)) / 2
-    card(s, ML, y2, w, Inches(2.0), 'Cấu hình đang chạy', [
-        'Pages nhận tên miền, Functions chuyển tiếp / , /t/* và /api/* về Worker.',
-        '/admin lấy bản build Flutter từ chính Pages.',
-        'Bản ghi CNAME trace → tule-trace.pages.dev, để DNS only.',
-    ])
-    card(s, ML + w + Inches(0.4), y2, w, Inches(2.0), 'Bí mật và tự động hoá', [
-        'PRIVATE_KEY và ADMIN_TOKEN đặt bằng wrangler secret put, không nằm trong repo.',
-        'Cron 10 phút quét lại hàng chờ neo chuỗi.',
-        'Deploy: một lệnh build Flutter, một lệnh Pages, một lệnh Worker.',
-    ], tint=BG)
+    card(s, ML, y2, w, Inches(2.4), 'Quản lý bí mật', [
+        'PRIVATE_KEY và ADMIN_TOKEN đặt bằng wrangler secret put.',
+        'Máy phát triển dùng worker/.dev.vars, đã đưa vào .gitignore.',
+        'Repo chỉ có .dev.vars.example với giá trị mẫu.',
+    ], size=13.5)
+    card(s, ML + w + Inches(0.4), y2, w, Inches(2.4), 'Chi phí vận hành', [
+        'Workers, D1, R2 nằm trong mức miễn phí ở lưu lượng hiện tại.',
+        'R2 không tính phí truyền dữ liệu ra.',
+        'Phí chuỗi: 0,0000057 VNX cho mỗi lần công bố.',
+    ], tint=BG, size=13.5)
 
 
 # =========================================================== D. chất lượng
@@ -563,13 +593,40 @@ def s_kiem_thu():
     card(s, ML + (w + Inches(0.25)) * 2, y, w, Inches(3.0), 'Kiểm chứng từ chuỗi', [
         'scripts/chain-verify.mjs đọc sự kiện BatchAnchored thẳng từ node Besu, '
         'không qua API của hệ thống.',
-        'Đây là phép thử duy nhất chứng minh nhãn "đã lưu lên blockchain" không phải nói suông.',
+        'Phép kiểm chứng này không phụ thuộc vào API của hệ thống.',
     ], tint=GREEN_SOFT, edge=GREEN_EDGE, title_color=RGBColor(0x2C, 0x6B, 0x3F))
     text(s, ML, y + Inches(3.25), CW, Inches(0.8),
          [('node scripts/chain-verify.mjs 0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca <sha256>',
            dict(size=15, font=MONO, color=INK, space=6)),
           ('Kết quả in ra mã lô, số phiên bản, ví đã ký, thời điểm và số khối.',
            dict(size=15, color=MUTED))])
+
+
+def s_cong_cu():
+    s = slide()
+    y = head(s, 'Quy trình phát triển', 'Công cụ sử dụng và cách phân chia công việc')
+    rows = [
+        ['Công cụ', 'Dùng vào việc'],
+        ['Visual Studio Code', 'Viết mã, chạy thử, xem log'],
+        ['Git và GitHub', 'Lưu lịch sử thay đổi, hai repo riêng cho landing và hệ truy xuất'],
+        ['Wrangler CLI', 'Chạy Worker ở máy local, deploy, đặt biến bí mật, chạy migration D1'],
+        ['Trợ lý AI (Claude)', 'Hỗ trợ viết mã, giải thích lỗi, rà soát lại đoạn đã viết'],
+        ['Chrome DevTools', 'Đo thời gian tải, kiểm tra request và kích thước tệp'],
+    ]
+    y2 = table(s, rows, ML, y, Inches(11.5), [Inches(3.4), Inches(8.1)], row_h=Inches(0.44))
+    y2 += Inches(0.25)
+    w = (CW - Inches(0.4)) / 2
+    card(s, ML, y2, w, Inches(2.2), 'AI hỗ trợ phần nào', [
+        'Sinh nhanh đoạn mã lặp lại, gợi ý cú pháp thư viện chưa quen.',
+        'Giải thích thông báo lỗi và đề xuất hướng xử lý.',
+        'Rà soát mã đã viết, chỉ ra trường hợp biên chưa xử lý.',
+    ], size=14)
+    card(s, ML + w + Inches(0.4), y2, w, Inches(2.2), 'Nhóm tự quyết định', [
+        'Phạm vi dữ liệu công bố và dữ liệu giữ nội bộ.',
+        'Mô hình dữ liệu và ràng buộc thiết kế RB-01…RB-07.',
+        'Đối chiếu quy trình sản xuất thật với từng công đoạn.',
+        'Thử nghiệm trên thiết bị thật và xử lý phản hồi.',
+    ], tint=GREEN_SOFT, edge=GREEN_EDGE, title_color=RGBColor(0x2C, 0x6B, 0x3F), size=14)
 
 
 def s_rang_buoc():
@@ -632,9 +689,10 @@ for build in [
     s_landing_kt, s_landing_code, s_landing_ui,
     lambda: section('Hệ truy xuất', 'C', 'Tám bộ phận: dữ liệu, API, toàn vẹn, blockchain, tệp, trang truy xuất, quản trị, hạ tầng'),
     s_kien_truc, s_bp_du_lieu, s_bp_api, s_bp_toan_ven, s_luong,
-    s_bp_chain, s_chain_bay, s_bp_media, s_bp_ssr, s_bp_admin, s_bp_ha_tang,
-    lambda: section('Đo lường và chất lượng', 'D', 'Hiệu năng, kiểm thử, ràng buộc thiết kế, kết quả'),
-    s_hieu_nang, s_kiem_thu, s_rang_buoc, s_ket_qua,
+    s_bp_chain, s_hop_dong, s_chain_bay, s_bp_media, s_bp_ssr, s_toi_uu_tai,
+    s_bp_admin, s_bp_ha_tang,
+    lambda: section('Đo lường và chất lượng', 'D', 'Hiệu năng, quy trình phát triển, kiểm thử, ràng buộc thiết kế'),
+    s_hieu_nang, s_cong_cu, s_kiem_thu, s_rang_buoc, s_ket_qua,
 ]:
     build()
 

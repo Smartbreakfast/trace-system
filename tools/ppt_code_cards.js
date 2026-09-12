@@ -1,7 +1,10 @@
 // Dựng ảnh code: mỗi đoạn một thẻ nền tối, có tên file và số dòng.
+// Chạy: npm i puppeteer-core && node tools/ppt_code_cards.js [thư-mục-ra]
 const puppeteer = require('puppeteer-core');
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const path = require('node:path');
+const OUT = process.argv[2] || path.join(__dirname, '..', 'docs', 'ppt-ky-thuat');
 
 const cards = [
   {
@@ -133,7 +136,7 @@ ${cards.map((c) => `<div class="card" id="${c.id}">
   await sleep(1500);
   for (const c of cards) {
     const el = await p.$('#' + c.id);
-    await el.screenshot({ path: `ppt/code-${c.id}.png` });
+    await el.screenshot({ path: path.join(OUT, `code-${c.id}.png`) });
   }
   console.log('xong', cards.length, 'the code');
   await b.close();
