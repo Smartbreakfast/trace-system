@@ -3,14 +3,17 @@
 
     python tools/seed_buffalo_batch.py TB-2026-001 [--to https://...] [--dry]
 
-Khác với bộ ngũ cốc, dòng thịt trâu chưa có hồ sơ sản xuất thật: khối lượng và
-tham số ở đây là số demo dựng theo định mức thông thường của nghề (ba cân thịt
-tươi cho khoảng một cân thành phẩm). Khi cơ sở gửi sổ sản xuất thật thì thay
-bảng YIELD và PARAMS bên dưới, không sửa tay trong admin để còn chạy lại được.
+Dòng thịt trâu chưa có hồ sơ sản xuất thật nên đây là dữ liệu demo. Các con số
+lấy theo mức mà nghề vẫn làm và báo chí ghi nhận: khoảng 3 kg thịt tươi cho 1 kg
+thành phẩm (Tiền Phong và CafeF ghi 3-4 kg tuỳ độ khô), thái dọc thớ thành
+miếng cỡ 5 x 20 cm, ướp 3-4 giờ, treo cách bếp than 60-70 cm và hong 9-12 giờ.
+Khi cơ sở gửi sổ sản xuất thật thì sửa bảng YIELD và PARAMS bên dưới rồi chạy
+lại, đừng sửa tay trong admin.
 
-Ảnh: bộ ảnh sản phẩm là ảnh dựng của thương hiệu, chú thích ghi rõ "ảnh minh
-hoạ". Ảnh công đoạn thì dùng thẻ minh hoạ trung tính như bên ngũ cốc, vì một
-tấm ảnh dựng trông như ảnh chụp đặt vào chỗ bằng chứng là tự phá hệ thống.
+Ảnh cũng là ảnh demo và chú thích nói thẳng điều đó: ảnh sản phẩm là ảnh dựng
+của thương hiệu, ảnh công đoạn là ảnh tham khảo của nghề gác bếp lấy trên mạng,
+ảnh vùng nguyên liệu là ảnh chụp màn hình Google Maps. Không tấm nào được ghi
+như thể là ảnh chụp tại chính lô này.
 """
 import io
 import json
@@ -45,9 +48,30 @@ GALLERY = [
     ('bap.png', 'gallery', 'Phần bắp trâu sau khi hong khói (ảnh minh hoạ)'),
 ]
 
+# Ảnh chụp thật của nghề gác bếp, dùng làm ảnh tham khảo cho từng công đoạn.
+# Chú thích ghi rõ "ảnh tham khảo" vì đây không phải ảnh chụp tại lô này.
+STEP_PHOTOS = {
+    'so che va thai dai': (
+        'thai-dai.jpg', 'Ảnh tham khảo: thịt thái dọc thớ, treo lên giàn'),
+    'tam uop': (
+        'tam-uop.jpg', 'Ảnh tham khảo: thịt và bộ gia vị mắc khén, hạt dổi'),
+    'hong khoi va lam kho': (
+        'hong-khoi.jpg', 'Ảnh tham khảo: hong trên bếp củi'),
+    'dong goi va dan qr': (
+        'thanh-pham.jpg', 'Ảnh tham khảo: thành phẩm trước khi đóng gói'),
+    'tiep nhan va kiem tra thit': (
+        'tiep-nhan-thit.jpg', 'Ảnh tham khảo: thịt trâu tươi lúc tiếp nhận'),
+}
+
+# Vùng nguyên liệu: ảnh chụp màn hình Google Maps, đúng cách mà bên ngũ cốc
+# đang làm cho bốn vùng trồng.
+AREA_PHOTO = ('vung-nguyen-lieu.png', 'Vùng nuôi trâu: tỉnh Lai Châu, Tây Bắc')
+
 # Khối lượng vào và ra của từng công đoạn, tính bằng gam, theo quy mô mẻ.
 # Khoá là tên công đoạn đã bỏ dấu.
 YIELD = {
+    # Lô nguyên liệu: tiếp nhận bao nhiêu nhận đủ bấy nhiêu, chỉ kiểm tra.
+    'tiep nhan va kiem tra thit': (1.00, 1.00),
     'so che va thai dai': (1.00, 0.90),
     'tam uop': (0.90, 0.96),
     'hong khoi va lam kho': (0.96, 0.35),
@@ -55,16 +79,21 @@ YIELD = {
 }
 
 PARAMS = {
+    'tiep nhan va kiem tra thit': {
+        'Nhiệt độ bảo quản': '0-4°C',
+        'Phần thịt': 'bắp và thăn',
+    },
     'so che va thai dai': {
         'Phần thịt': 'bắp và thăn',
-        'Độ dày dải': '1,5-2 cm',
+        'Miếng thái': 'dọc thớ, khoảng 5 x 20 cm',
     },
     'tam uop': {
-        'Gia vị': 'muối, mắc khén, hạt dổi, gừng, tỏi, ớt',
-        'Thời gian ướp': '8 giờ',
+        'Gia vị': 'muối hột, mắc khén, hạt dổi, gừng, tỏi, sả, ớt',
+        'Thời gian ướp': '4 giờ',
     },
     'hong khoi va lam kho': {
         'Nguồn nhiệt': 'bếp củi',
+        'Khoảng cách treo': '60-70 cm',
         'Thời gian': '12 giờ',
     },
     'dong goi va dan qr': {
@@ -126,7 +155,10 @@ def request(base, path, token, method='GET', body=None, form=None):
 
 
 def shrink(name, role):
-    edge, quality = (1400, 82) if role == 'cover' else (1280, 75)
+    edge, quality = {
+        'cover': (1400, 82),
+        'area_map': (1600, 90),
+    }.get(role, (1280, 75))
     img = Image.open(os.path.join(PHOTOS, name)).convert('RGB')
     width, height = img.size
     if max(width, height) > edge:
@@ -191,14 +223,19 @@ def seed(code, base, dry):
     trace = request(base, '/api/admin/product-batches/%s/trace' % code, token)
     fresh = SCALE.get(code, 12000)
 
-    print('Mô tả lô')
-    if not dry:
-        request(base, '/api/admin/product-batches/%s' % code, token, 'PATCH',
-                {'description': DESCRIPTION})
+    # Lô nguyên liệu (NL-...) là thịt tươi trước khi chế biến: không mang mô tả
+    # và không mang ảnh sản phẩm của lô thành phẩm.
+    raw_lot = code.upper().startswith('NL-')
+
+    if not raw_lot:
+        print('Mô tả lô')
+        if not dry:
+            request(base, '/api/admin/product-batches/%s' % code, token,
+                    'PATCH', {'description': DESCRIPTION})
 
     print('\nẢnh sản phẩm')
     have = {m.get('caption') for m in trace['media']}
-    for name, role, caption in GALLERY:
+    for name, role, caption in (() if raw_lot else GALLERY):
         if caption in have:
             print('     đã có', caption)
             continue
@@ -213,6 +250,27 @@ def seed(code, base, dry):
                 'ownerType': 'product_batch',
                 'ownerId': str(trace['id']),
                 'role': role,
+                'caption': caption,
+            },
+        })
+
+    print('\nVùng nguyên liệu')
+    for ingredient in trace['ingredients']:
+        if any(item['role'] == 'area_map' for item in ingredient['media']):
+            print('     đã có ảnh vùng cho', ingredient['name'])
+            continue
+        name, caption = AREA_PHOTO
+        payload = shrink(name, 'area_map')
+        print('     + area_map %5.0f KB  %s' % (len(payload) / 1024, caption))
+        if dry:
+            continue
+        request(base, '/api/admin/media', token, 'POST', form={
+            'bytes': payload,
+            'name': 'vung-nguyen-lieu.jpg',
+            'fields': {
+                'ownerType': 'ingredient_batch',
+                'ownerId': str(ingredient['id']),
+                'role': 'area_map',
                 'caption': caption,
             },
         })
@@ -239,10 +297,31 @@ def seed(code, base, dry):
         if not dry:
             request(base, '/api/admin/process-events/%s' % event['id'], token,
                     'PATCH', body)
-        if event['media']:
+        shot = STEP_PHOTOS.get(key)
+        has_photo = shot and os.path.exists(os.path.join(PHOTOS, shot[0]))
+        # Ảnh dựng đặt tạm lúc chưa có ảnh tham khảo thì thay bằng ảnh thật.
+        # Ảnh do người vận hành tự tải lên thì không đụng tới.
+        placeholder = [
+            item for item in event['media']
+            if (item.get('caption') or '').startswith('Ảnh minh hoạ công đoạn')
+        ]
+        if event['media'] and not (has_photo and
+                                   len(placeholder) == len(event['media'])):
             continue
-        picture = illustration(event['title'])
-        print('     + ảnh minh hoạ %5.0f KB' % (len(picture) / 1024))
+        for item in placeholder:
+            print('     - bỏ ảnh dựng cũ')
+            if not dry:
+                request(base, '/api/admin/media/%s' % item['id'], token,
+                        'DELETE')
+        if has_photo:
+            picture = shrink(shot[0], 'gallery')
+            caption = shot[1]
+            print('     + ảnh tham khảo %5.0f KB  %s'
+                  % (len(picture) / 1024, caption))
+        else:
+            picture = illustration(event['title'])
+            caption = 'Ảnh minh hoạ công đoạn %s' % event['title']
+            print('     + ảnh minh hoạ %5.0f KB' % (len(picture) / 1024))
         if dry:
             continue
         request(base, '/api/admin/media', token, 'POST', form={
@@ -252,7 +331,7 @@ def seed(code, base, dry):
                 'ownerType': 'process_event',
                 'ownerId': str(event['id']),
                 'role': 'gallery',
-                'caption': 'Ảnh minh hoạ công đoạn %s' % event['title'],
+                'caption': caption,
             },
         })
 
