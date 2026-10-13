@@ -10,10 +10,10 @@ miếng cỡ 5 x 20 cm, ướp 3-4 giờ, treo cách bếp than 60-70 cm và hon
 Khi cơ sở gửi sổ sản xuất thật thì sửa bảng YIELD và PARAMS bên dưới rồi chạy
 lại, đừng sửa tay trong admin.
 
-Ảnh cũng là ảnh demo và chú thích nói thẳng điều đó: ảnh sản phẩm là ảnh dựng
-của thương hiệu, ảnh công đoạn là ảnh tham khảo của nghề gác bếp lấy trên mạng,
-ảnh vùng nguyên liệu là ảnh chụp màn hình Google Maps. Không tấm nào được ghi
-như thể là ảnh chụp tại chính lô này.
+Ảnh cũng là ảnh demo và chú thích nói thẳng điều đó: ảnh sản phẩm và ảnh công
+đoạn đều là ảnh tham khảo của nghề gác bếp lấy trên mạng, ảnh vùng nguyên liệu
+là ảnh chụp màn hình Google Maps. Không tấm nào được ghi như thể là ảnh chụp tại
+chính lô này, và không tấm nào là ảnh bao bì của một thương hiệu đang bán hàng.
 """
 import io
 import json
@@ -40,13 +40,27 @@ DESCRIPTION = (
     'túi hút chân không 100 g, dán mã QR của chính lô đó.'
 )
 
-# Ảnh sản phẩm của thương hiệu. Ảnh dựng, nên chú thích nói thẳng.
+# Ảnh sản phẩm: ảnh chụp món thịt trâu gác bếp nói chung, không phải bao bì của
+# thương hiệu nào. Dữ liệu này là demo nên không mượn ảnh sản phẩm thật của ai.
 GALLERY = [
-    ('hero.png', 'cover', 'Hộp quà Thịt trâu gác bếp (ảnh minh hoạ)'),
-    ('mo-hop.png', 'gallery', 'Hộp mở nắp, hai túi 100 g (ảnh minh hoạ)'),
-    ('than.png', 'gallery', 'Phần thăn trâu sau khi hong khói (ảnh minh hoạ)'),
-    ('bap.png', 'gallery', 'Phần bắp trâu sau khi hong khói (ảnh minh hoạ)'),
+    ('sp-mam-co.jpg', 'cover',
+     'Ảnh tham khảo: thịt trâu gác bếp xé dọc thớ'),
+    ('sp-tho-thit.jpg', 'gallery',
+     'Ảnh tham khảo: thớ thịt bên trong miếng gác bếp'),
+    ('sp-dia-thanh-pham.jpg', 'gallery',
+     'Ảnh tham khảo: thành phẩm thái miếng và xé sợi'),
+    ('sp-hut-chan-khong.jpg', 'gallery',
+     'Ảnh tham khảo: quy cách túi hút chân không'),
 ]
+
+# Bộ ảnh sản phẩm cũ là ảnh dựng bao bì của một thương hiệu riêng, không được
+# dùng cho bản demo công khai. Gặp chú thích nào trong danh sách này thì xoá.
+RETIRED_CAPTIONS = {
+    'Hộp quà Thịt trâu gác bếp (ảnh minh hoạ)',
+    'Hộp mở nắp, hai túi 100 g (ảnh minh hoạ)',
+    'Phần thăn trâu sau khi hong khói (ảnh minh hoạ)',
+    'Phần bắp trâu sau khi hong khói (ảnh minh hoạ)',
+}
 
 # Ảnh chụp thật của nghề gác bếp, dùng làm ảnh tham khảo cho từng công đoạn.
 # Chú thích ghi rõ "ảnh tham khảo" vì đây không phải ảnh chụp tại lô này.
@@ -234,7 +248,16 @@ def seed(code, base, dry):
                     'PATCH', {'description': DESCRIPTION})
 
     print('\nẢnh sản phẩm')
-    have = {m.get('caption') for m in trace['media']}
+    for item in trace['media']:
+        if item.get('caption') not in RETIRED_CAPTIONS:
+            continue
+        print('     - bỏ ảnh bao bì cũ:', item.get('caption'))
+        if not dry:
+            request(base, '/api/admin/media/%s' % item['id'], token, 'DELETE')
+    have = {
+        m.get('caption') for m in trace['media']
+        if m.get('caption') not in RETIRED_CAPTIONS
+    }
     for name, role, caption in (() if raw_lot else GALLERY):
         if caption in have:
             print('     đã có', caption)
