@@ -72,7 +72,11 @@ GALLERY = [
 ]
 
 # Mức nén theo vai trò, giữ đúng bảng trong lib/ui/media_manager.dart.
-RECIPE = {'area_map': (1600, 90), 'gallery': (1280, 75)}
+RECIPE = {'area_map': (1600, 90), 'gallery': (1280, 75),
+          'lab_report': (2000, 86)}
+
+# Phiếu kiểm nghiệm của mẻ, nhóm chụp lại và gửi kèm bộ ảnh.
+LAB_REPORT = ('Mẫu/Ảnh kiểm nghiệm.JPG', 'Phiếu kiểm nghiệm mẻ sản phẩm')
 
 
 def fold(text):
@@ -169,6 +173,11 @@ def seed(code, base, dry):
             continue
         upload(base, token, dry, name, 'gallery', 'product_batch', trace['id'],
                caption)
+
+    if not any(m['role'] == 'lab_report' for m in trace['media']):
+        print('\nPhiếu kiểm nghiệm')
+        upload(base, token, dry, LAB_REPORT[0], 'lab_report', 'product_batch',
+               trace['id'], LAB_REPORT[1])
 
     for ing in trace['ingredients']:
         key = fold(ing['name'])

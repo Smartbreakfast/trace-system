@@ -23,6 +23,29 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT_BOLD = os.path.join(ROOT, 'assets', 'fonts', 'BeVietnamPro-Bold.ttf')
 FONT_REG = os.path.join(ROOT, 'assets', 'fonts', 'BeVietnamPro-Regular.ttf')
 TOKEN_FILE = os.path.join(ROOT, 'worker', '.admin-token.txt')
+PHOTOS = os.path.join(ROOT, 'docs', 'image')
+
+# Ảnh chụp thật của công đoạn, nhóm gửi về trong docs/image/Mẫu và đánh số theo
+# nhánh nguyên liệu. Công đoạn nào có ảnh thật thì dùng ảnh đó; chỉ công đoạn
+# còn thiếu mới sinh hình minh hoạ.
+REAL_PHOTOS = {
+    'thu hoach lua nep nuong': ('Mẫu/1.2 thu hoạch lúa làm cốm.png',
+                                'Thu hoạch lúa nếp nương làm cốm'),
+    'rang com': ('Mẫu/1.3 rang cốm.png', 'Rang cốm trên chảo gang'),
+    'nghien min thanh bot com': ('Mẫu/1.4 nghiền cốm.JPG',
+                                 'Nghiền cốm thành bột'),
+    'tiep nhan va chon lac': ('Mẫu/2.2 tiếp nhận và chọn lạc.png',
+                              'Tiếp nhận và chọn lạc đỏ Lục Yên'),
+    'ngam lac': ('Mẫu/2.3 ngâm lạc.png', 'Ngâm lạc trước khi nghiền'),
+    'nghien min va loc lay sua lac': ('Mẫu/2.4 nghiền lạc.JPG',
+                                      'Nghiền lạc và lọc lấy sữa lạc'),
+    'say phun thanh bot lac': ('Mẫu/2.5  xấy phun thành bột lạc.JPG',
+                               'Sấy phun sữa lạc thành bột'),
+    'chon va boc vo chuoi': ('Mẫu/3.2 chọn và tách vỏ chuối.png',
+                             'Chọn và tách vỏ chuối tiêu xanh'),
+    'lam sach, got vo va thai': ('Mẫu/4.1 gọt khoai môn.png',
+                                'Gọt vỏ và thái khoai môn'),
+}
 
 INK = (23, 53, 42)
 
@@ -200,6 +223,27 @@ def illustration(title, branch_key, subtitle):
     return buffer.getvalue()
 
 
+def real_photo(title_key):
+    """Ảnh thật của công đoạn, đã nén về mức mà màn quản trị dùng cho gallery."""
+    entry = REAL_PHOTOS.get(title_key)
+    if not entry:
+        return None
+    path, caption = entry
+    full = os.path.join(PHOTOS, path)
+    if not os.path.exists(full):
+        print('     thiếu ảnh', path)
+        return None
+    img = Image.open(full).convert('RGB')
+    width, height = img.size
+    if max(width, height) > 1280:
+        scale = 1280 / max(width, height)
+        img = img.resize((round(width * scale), round(height * scale)),
+                         Image.LANCZOS)
+    buffer = io.BytesIO()
+    img.save(buffer, 'JPEG', quality=75, optimize=True)
+    return buffer.getvalue(), caption
+
+
 def params_for(title_key, branch_key):
     for name, branch, values in PARAMS:
         if name == title_key and branch in ('*', branch_key):
@@ -260,8 +304,15 @@ def seed(code, base, dry):
 
             if event['media']:
                 continue
-            picture = illustration(event['title'], key, label)
-            print('     + ảnh minh hoạ %5.0f KB' % (len(picture) / 1024))
+            shot = real_photo(title_key)
+            if shot:
+                picture, caption = shot
+                print('     + ảnh thật    %5.0f KB  %s'
+                      % (len(picture) / 1024, caption))
+            else:
+                picture = illustration(event['title'], key, label)
+                caption = 'Ảnh minh hoạ công đoạn %s' % event['title']
+                print('     + ảnh minh hoạ %5.0f KB' % (len(picture) / 1024))
             made += 1
             if dry:
                 continue
@@ -272,11 +323,11 @@ def seed(code, base, dry):
                     'ownerType': 'process_event',
                     'ownerId': str(event['id']),
                     'role': 'gallery',
-                    'caption': 'Ảnh minh hoạ công đoạn %s' % event['title'],
+                    'caption': caption,
                 },
             })
 
-    print('\n%d công đoạn được cập nhật, %d ảnh minh hoạ' % (touched, made))
+    print('\n%d công đoạn được cập nhật, %d ảnh được thêm' % (touched, made))
     if dry:
         print('chạy thử, chưa đụng vào dữ liệu.')
         return
