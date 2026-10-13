@@ -52,21 +52,12 @@ class _ExplorerPageState extends State<ExplorerPage> {
   /// Hồ sơ đang xem lấy từ bản lưu trên máy chứ không phải từ máy chủ.
   CachedTrace? offlineCopy;
 
-  /// Các lô đã mở trước đó, để mở lại nhanh và để xem được khi mất mạng.
-  List<CachedTrace> recent = const [];
-
   @override
   void initState() {
     super.initState();
     _load();
     _loadSamples();
     _loadCatalog();
-    _loadRecent();
-  }
-
-  Future<void> _loadRecent() async {
-    final items = await TraceCache.recent();
-    if (mounted) setState(() => recent = items);
   }
 
   Future<void> _loadCatalog() async {
@@ -77,11 +68,15 @@ class _ExplorerPageState extends State<ExplorerPage> {
       final fromCode = code == null
           ? null
           : items
-                .where((product) => product.batches.any((batch) => batch.code == code))
+                .where(
+                  (product) =>
+                      product.batches.any((batch) => batch.code == code),
+                )
                 .firstOrNull;
-    setState(() {
+      setState(() {
         products = items;
-        selectedSku = fromCode?.sku ??
+        selectedSku =
+            fromCode?.sku ??
             (items.any((item) => item.sku == selectedSku)
                 ? selectedSku
                 : items.first.sku);
@@ -153,9 +148,7 @@ class _ExplorerPageState extends State<ExplorerPage> {
       });
       // Lưu bản sao để lần sau mất mạng vẫn mở lại được. Không chờ việc này:
       // hồ sơ đã hiện rồi, lưu được hay không cũng không đổi màn hình.
-      unawaited(
-        TraceCache.save(code, loaded.batch.name, data).then((_) => _loadRecent()),
-      );
+      unawaited(TraceCache.save(code, loaded.batch.name, data));
     } on TraceNotFound {
       if (!mounted) return;
       setState(() => phase = LoadPhase.notFound);
@@ -217,9 +210,8 @@ class _ExplorerPageState extends State<ExplorerPage> {
     context.go('/t/$code');
   }
 
-  PublicProduct? get _selectedProduct => products
-      .where((product) => product.sku == selectedSku)
-      .firstOrNull;
+  PublicProduct? get _selectedProduct =>
+      products.where((product) => product.sku == selectedSku).firstOrNull;
 
   List<BatchRef> get _visibleBatches {
     final batches = _selectedProduct?.batches ?? const <BatchRef>[];
@@ -244,7 +236,10 @@ class _ExplorerPageState extends State<ExplorerPage> {
   void _selectProductForCode(String? code) {
     if (code == null) return;
     final match = products
-        .where((product) => product.batches.any((batch) => batch.code == code.toUpperCase()))
+        .where(
+          (product) =>
+              product.batches.any((batch) => batch.code == code.toUpperCase()),
+        )
         .firstOrNull;
     if (match != null) selectedSku = match.sku;
   }
@@ -313,10 +308,6 @@ class _ExplorerPageState extends State<ExplorerPage> {
     LoadPhase.idle => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (recent.isNotEmpty) ...[
-          _RecentBatches(items: recent, onOpenCode: _openCode),
-          const SizedBox(height: 26),
-        ],
         SourcingSection(
           record: null,
           samples: _visibleBatches.isEmpty ? samples : _visibleBatches,
@@ -352,9 +343,7 @@ class _ExplorerPageState extends State<ExplorerPage> {
     ),
     LoadPhase.ready => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _content(context, wide, record!),
-      ],
+      children: [_content(context, wide, record!)],
     ),
   };
 
@@ -467,78 +456,5 @@ class _OfflineBanner extends StatelessWidget {
         TextButton(onPressed: onRetry, child: const Text('Tải lại')),
       ],
     ),
-  );
-}
-
-/// Các lô đã mở trên máy này. Người vận hành và người mua đều hay mở lại đúng
-/// vài mã quen, và danh sách này mở được cả khi không có mạng.
-class _RecentBatches extends StatelessWidget {
-  const _RecentBatches({required this.items, required this.onOpenCode});
-
-  final List<CachedTrace> items;
-  final ValueChanged<String> onOpenCode;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'ĐÃ XEM TRÊN MÁY NÀY',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: .8,
-          color: brandOrangeText,
-        ),
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final item in items.take(6))
-            InkWell(
-              onTap: () => onOpenCode(item.code),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: brandSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: landingLine),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.code,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: landingInk,
-                      ),
-                    ),
-                    if (item.name.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          item.name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: brandMuted,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    ],
   );
 }

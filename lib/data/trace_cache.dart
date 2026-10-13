@@ -33,6 +33,8 @@ class CachedTrace {
 /// và kèm thời điểm tải: trạng thái kiểm chứng trong đó là của lúc tải, không
 /// phải của lúc này.
 class TraceCache {
+  /// Danh sách lô đã lưu. Không đem ra khoe trên giao diện, chỉ dùng để biết
+  /// lô nào cũ nhất mà xoá đi cho bộ nhớ khỏi phình.
   static const _indexKey = 'tule_recent_v1';
   static const _max = 12;
 
@@ -66,10 +68,7 @@ class TraceCache {
       for (final dropped in index.skip(_max)) {
         await prefs.remove(_key(dropped['code'] as String));
       }
-      await prefs.setString(
-        _indexKey,
-        jsonEncode(index.take(_max).toList()),
-      );
+      await prefs.setString(_indexKey, jsonEncode(index.take(_max).toList()));
     } catch (_) {
       // Máy chặn lưu trữ thì chỉ mất tiện lợi, không phải lỗi chặn dùng.
     }
@@ -94,27 +93,6 @@ class TraceCache {
       );
     } catch (_) {
       return null;
-    }
-  }
-
-  /// Các lô đã mở, mới nhất trước.
-  static Future<List<CachedTrace>> recent() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return _readIndex(prefs)
-          .map(
-            (item) => CachedTrace(
-              code: item['code'] as String? ?? '',
-              name: item['name'] as String? ?? '',
-              savedAt:
-                  DateTime.tryParse(item['savedAt'] as String? ?? '') ??
-                  DateTime.now(),
-            ),
-          )
-          .where((item) => item.code.isNotEmpty)
-          .toList();
-    } catch (_) {
-      return const [];
     }
   }
 
