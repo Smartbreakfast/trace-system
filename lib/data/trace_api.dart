@@ -6,7 +6,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 
-import '../models/trace_models.dart' show BatchPage, BatchRef;
+import '../models/trace_models.dart'
+    show BatchPage, BatchRef, ProductCatalog, PublicProduct;
 
 /// Lỗi có ngữ cảnh để UI hiển thị đúng trạng thái thay vì một `Exception` chung.
 sealed class TraceApiFailure implements Exception {
@@ -51,12 +52,17 @@ class TraceApi {
   /// Ghi đè lúc build: `--dart-define=API_BASE_URL=https://trace.tule.vn/api`
   static const _configured = String.fromEnvironment('API_BASE_URL');
 
+  /// Địa chỉ dùng khi build không khai API_BASE_URL. Bản di động không có
+  /// origin để suy ra nên phải ghi thẳng tên miền thật: một bản APK cài trên
+  /// máy người dùng mà trỏ về localhost thì không gọi được gì.
+  static const productionBaseUrl = 'https://trace.smartbreakfast.store/api';
+
   /// Worker phục vụ luôn bản web nên mặc định API cùng origin với trang.
   /// Không còn hardcode localhost như bản đầu.
   static String get resolvedBaseUrl {
     if (_configured.isNotEmpty) return _configured;
     if (kIsWeb) return '${Uri.base.origin}/api';
-    return 'http://127.0.0.1:8787/api';
+    return productionBaseUrl;
   }
 
   /// Đường dẫn tuyệt đối của một file media do API trả về dạng `/api/media/...`.
@@ -190,10 +196,46 @@ class TraceApi {
     return data is Map<String, dynamic> ? data : const {};
   }
 
+  Future<List<PublicProduct>> publicCatalog() async {
+    final data = await _send(() => _client.get(_uri('/public/catalog')));
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map<String, dynamic>) PublicProduct.fromApi(item),
+    ];
+  }
+
+  Future<List<ProductCatalog>> listProducts() async {
+    final data = await _send(
+      () => _client.get(_uri('/admin/products'), headers: _headers(admin: true)),
+    );
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map<String, dynamic>) ProductCatalog.fromApi(item),
+    ];
+  }
+
+  Future<ProductCatalog?> createCatalogProduct({
+    required String sku,
+    required String name,
+    String description = '',
+    String templateKey = '',
+  }) async {
+    final data = await _write('POST', '/admin/products', {
+      'sku': sku,
+      'name': name,
+      'description': description,
+      'templateKey': templateKey,
+    });
+    return data.isEmpty ? null : ProductCatalog.fromApi(data);
+  }
+
   /// Một trang danh sách lô. Lọc và sắp xếp chạy ở D1 chứ không tải hết về
   /// rồi lọc ở client: số lô sẽ tăng theo từng vụ, không có trần.
   Future<BatchPage> listBatches({
     String query = '',
+    String productSku = '',
     String sort = 'newest',
     int page = 1,
     int limit = 10,
@@ -202,6 +244,7 @@ class TraceApi {
       () => _client.get(
         _uri('/admin/product-batches', {
           if (query.trim().isNotEmpty) 'q': query.trim(),
+          if (productSku.trim().isNotEmpty) 'productSku': productSku.trim(),
           'sort': sort,
           'page': '$page',
           'limit': '$limit',

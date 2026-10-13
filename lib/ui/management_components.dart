@@ -163,8 +163,8 @@ class ManagementStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String read(String key) {
-      final value = summary?[key];
+    String read(String key, {String? fallback}) {
+      final value = summary?[key] ?? (fallback == null ? null : summary?[fallback]);
       if (loading || value == null) return '—';
       return value.toString();
     }
@@ -178,7 +178,7 @@ class ManagementStats extends StatelessWidget {
       children: [
         StatCard(
           label: 'LÔ THÀNH PHẨM',
-          value: read('products'),
+           value: read('batchCount', fallback: 'products'),
           icon: Icons.inventory_2_outlined,
         ),
         StatCard(
@@ -304,7 +304,7 @@ class BatchRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                   Row(
                     children: [
                       Flexible(
                         child: Text(
@@ -325,8 +325,20 @@ class BatchRow extends StatelessWidget {
                             : BadgeTone.pending,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 5),
+                   ),
+                   if (item.productName.isNotEmpty) ...[
+                     const SizedBox(height: 3),
+                     Text(
+                       item.productName,
+                       overflow: TextOverflow.ellipsis,
+                       style: const TextStyle(
+                         color: componentInk,
+                         fontSize: 12,
+                         fontWeight: FontWeight.w700,
+                       ),
+                     ),
+                   ],
+                   const SizedBox(height: 5),
                   Text(
                     [
                       item.code,
@@ -677,6 +689,120 @@ class BatchFormValues {
   final bool withStarter;
 }
 
+class ProductFormValues {
+  const ProductFormValues({
+    required this.sku,
+    required this.name,
+    required this.description,
+    required this.templateKey,
+  });
+
+  final String sku;
+  final String name;
+  final String description;
+  final String templateKey;
+}
+
+class ProductCreateDialog extends StatefulWidget {
+  const ProductCreateDialog({super.key});
+
+  static Future<ProductFormValues?> show(BuildContext context) =>
+      showDialog<ProductFormValues>(
+        context: context,
+        builder: (_) => const ProductCreateDialog(),
+      );
+
+  @override
+  State<ProductCreateDialog> createState() => _ProductCreateDialogState();
+}
+
+class _ProductCreateDialogState extends State<ProductCreateDialog> {
+  final formKey = GlobalKey<FormState>();
+  final sku = TextEditingController();
+  final name = TextEditingController();
+  final description = TextEditingController();
+  final templateKey = TextEditingController();
+
+  @override
+  void dispose() {
+    sku.dispose();
+    name.dispose();
+    description.dispose();
+    templateKey.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    Navigator.of(context).pop(
+      ProductFormValues(
+        sku: sku.text.trim().toLowerCase(),
+        name: name.text.trim(),
+        description: description.text.trim(),
+        templateKey: templateKey.text.trim().toLowerCase(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Thêm sản phẩm'),
+    content: SizedBox(
+      width: 460,
+      child: SingleChildScrollView(
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Tên sản phẩm'),
+                validator: (value) => (value ?? '').trim().length < 2
+                    ? 'Nhập tên sản phẩm.'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: sku,
+                decoration: const InputDecoration(labelText: 'Mã sản phẩm'),
+                validator: (value) {
+                  final raw = (value ?? '').trim();
+                  if (!RegExp(r'^[a-z0-9][a-z0-9-]{2,79}$').hasMatch(raw)) {
+                    return 'Dùng chữ thường, số và dấu gạch ngang.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: description,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: 'Mô tả'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: templateKey,
+                decoration: const InputDecoration(
+                  labelText: 'Template nguyên liệu (tuỳ chọn)',
+                  hintText: 'tule-breakfast',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Huỷ'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Thêm sản phẩm')),
+    ],
+  );
+}
+
 /// Hộp thoại tạo lô mới.
 ///
 /// Chỉ hỏi những gì bắt buộc phải có ngay lúc tạo. Nguyên liệu, ảnh và công
@@ -684,21 +810,25 @@ class BatchFormValues {
 /// dài như bản cũ.
 class BatchCreateDialog extends StatefulWidget {
   const BatchCreateDialog({
+    required this.products,
     required this.existingCodes,
     required this.suggestedCode,
     super.key,
   });
 
   final List<String> existingCodes;
+  final List<ProductCatalog> products;
   final String suggestedCode;
 
   static Future<BatchFormValues?> show(
     BuildContext context, {
+    required List<ProductCatalog> products,
     required List<String> existingCodes,
     required String suggestedCode,
   }) => showDialog<BatchFormValues>(
     context: context,
     builder: (_) => BatchCreateDialog(
+      products: products,
       existingCodes: existingCodes,
       suggestedCode: suggestedCode,
     ),
@@ -710,8 +840,8 @@ class BatchCreateDialog extends StatefulWidget {
 
 class _BatchCreateDialogState extends State<BatchCreateDialog> {
   final formKey = GlobalKey<FormState>();
-  final name = TextEditingController(
-    text: 'Tú Lệ Smart Breakfast',
+  late final name = TextEditingController(
+    text: widget.products.isNotEmpty ? widget.products.first.name : '',
   );
   late final code = TextEditingController(text: widget.suggestedCode);
   final facility = TextEditingController(text: 'Trung tâm Phát triển và Giao dịch Công nghệ thành phố Hà Nội');
@@ -719,7 +849,26 @@ class _BatchCreateDialogState extends State<BatchCreateDialog> {
   String expiryDate = DateField.format(
     DateTime.now().add(const Duration(days: 365)),
   );
-  bool withStarter = true;
+  ProductCatalog? selectedProduct;
+  bool withStarter = false;
+
+  String _shortPrefix(ProductCatalog product) {
+    if (product.sku == 'tule-breakfast') return 'TL';
+    if (product.sku.startsWith('tule-breakfast-')) return 'TL';
+    final words = product.sku
+        .split('-')
+        .where((word) => word.isNotEmpty)
+        .toList();
+    final prefix = words.map((word) => word[0]).join().toUpperCase();
+    return prefix.isEmpty ? 'PRD' : prefix.substring(0, prefix.length.clamp(1, 3));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    selectedProduct = widget.products.isEmpty ? null : widget.products.first;
+    withStarter = selectedProduct?.templateKey == 'tule-breakfast';
+  }
 
   @override
   void dispose() {
@@ -730,11 +879,13 @@ class _BatchCreateDialogState extends State<BatchCreateDialog> {
   }
 
   void _submit() {
+    if (selectedProduct == null) return;
     if (!(formKey.currentState?.validate() ?? false)) return;
     Navigator.of(context).pop(
       BatchFormValues(
         values: {
           'name': name.text.trim(),
+          'productId': selectedProduct!.id,
           'code': code.text.trim().toUpperCase(),
           'productionDate': productionDate,
           'expiryDate': expiryDate,
@@ -759,6 +910,31 @@ class _BatchCreateDialogState extends State<BatchCreateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              DropdownButtonFormField<ProductCatalog>(
+                initialValue: selectedProduct,
+                decoration: const InputDecoration(labelText: 'Sản phẩm'),
+                items: [
+                  for (final product in widget.products)
+                    DropdownMenuItem(
+                      value: product,
+                      child: Text(product.name),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    selectedProduct = value;
+                    name.text = value.name;
+                    code.text =
+                        '${_shortPrefix(value)}-${DateTime.now().year}-001';
+                    withStarter = value.templateKey == 'tule-breakfast';
+                  });
+                },
+                validator: (_) => selectedProduct == null
+                    ? 'Chọn sản phẩm.'
+                    : null,
+              ),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: name,
                 decoration: const InputDecoration(labelText: 'Tên lô'),
@@ -816,7 +992,7 @@ class _BatchCreateDialogState extends State<BatchCreateDialog> {
                     setState(() => withStarter = value ?? false),
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Tạo sẵn bốn nguyên liệu Tú Lệ'),
+                title: const Text('Tạo sẵn nguyên liệu theo template sản phẩm'),
               ),
             ],
           ),

@@ -5,3 +5,8 @@
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 # Ảnh và file trong R2 đi qua worker, worker tự đặt header immutable của nó.
+
+# Apple đòi file liên kết ứng dụng phải trả đúng application/json, mà file này
+# không có đuôi nên Pages mặc định trả octet-stream.
+/.well-known/apple-app-site-association
+  Content-Type: application/json

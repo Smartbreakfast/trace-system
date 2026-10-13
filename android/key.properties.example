@@ -1,0 +1,10 @@
+# Chép thành android/key.properties trên máy phát hành (file thật đã gitignore).
+# Tạo kho khoá một lần, giữ kỹ: mất nó là không cập nhật được app trên Play nữa.
+#
+#   keytool -genkey -v -keystore C:/Users/<ban>/keys/tule-upload.jks \
+#     -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=C:/Users/sontm/keys/tule-upload.jks

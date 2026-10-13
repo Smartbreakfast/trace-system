@@ -70,3 +70,6 @@ tai-lieu/*.pptx
 # chu khong day len repo, trong repo da co tai lieu cua chinh du an.
 tai-lieu/*.docx
 tai-lieu/*.pdf
+
+# Khoa ky ban phat hanh Android: duong dan va mat khau kho khoa.
+android/key.properties

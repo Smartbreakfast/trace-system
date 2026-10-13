@@ -32,9 +32,22 @@ const _menu = <({String label, String path})>[
 /// Thanh điều hướng, dựng theo `.site-header` của trang giới thiệu: cao 68px,
 /// nền trắng, viền đáy một nét, mục chữ 15px và nút đặt hàng dạng viên thuốc.
 class ExplorerHeader extends StatefulWidget {
-  const ExplorerHeader({this.onHome, super.key});
+  const ExplorerHeader({
+    this.onHome,
+    this.products = const [],
+    this.selectedSku = '',
+    this.currentCode,
+    this.onProductChanged,
+    this.onOpenCode,
+    super.key,
+  });
 
   final VoidCallback? onHome;
+  final List<PublicProduct> products;
+  final String selectedSku;
+  final String? currentCode;
+  final ValueChanged<String>? onProductChanged;
+  final ValueChanged<String>? onOpenCode;
 
   /// Trang giới thiệu chuyển sang nút Menu dưới 1220px, lấy đúng ngưỡng đó.
   static const fullNavWidth = 1220.0;
@@ -88,13 +101,19 @@ class _ExplorerHeaderState extends State<ExplorerHeader> {
                         runSpacing: 2,
                         children: [
                           for (final item in _menu)
-                            _MenuLink(
-                              label: item.label,
-                              url: item.path.isEmpty
-                                  ? null
-                                  : '$_landingUrl${item.path}',
-                              current: item.path.isEmpty,
-                            ),
+                            item.path.isEmpty
+                                ? _TraceMenuLink(
+                                    products: widget.products,
+                                    selectedSku: widget.selectedSku,
+                                    currentCode: widget.currentCode,
+                                    onProductChanged: widget.onProductChanged,
+                                    onOpenCode: widget.onOpenCode,
+                                  )
+                                : _MenuLink(
+                                    label: item.label,
+                                    url: '$_landingUrl${item.path}',
+                                    current: false,
+                                  ),
                         ],
                       ),
                     ),
@@ -152,7 +171,14 @@ class _ExplorerHeaderState extends State<ExplorerHeader> {
           // Danh sách mục trên màn hẹp, mở ra ngay dưới thanh trên.
           if (!full && menuOpen)
             centred(
-              _MobileMenu(onPick: () => setState(() => menuOpen = false)),
+               _MobileMenu(
+                 onPick: () => setState(() => menuOpen = false),
+                 products: widget.products,
+                 selectedSku: widget.selectedSku,
+                 currentCode: widget.currentCode,
+                 onProductChanged: widget.onProductChanged,
+                 onOpenCode: widget.onOpenCode,
+               ),
               padding: const EdgeInsets.only(bottom: 10),
             ),
         ],
@@ -199,9 +225,21 @@ class _MenuToggle extends StatelessWidget {
 /// Danh sách mục trên màn hẹp, theo `.mobile-nav`: mỗi mục một hàng chữ 18px,
 /// gạch dưới một nét.
 class _MobileMenu extends StatelessWidget {
-  const _MobileMenu({required this.onPick});
+  const _MobileMenu({
+    required this.onPick,
+    required this.products,
+    required this.selectedSku,
+    required this.currentCode,
+    required this.onProductChanged,
+    required this.onOpenCode,
+  });
 
   final VoidCallback onPick;
+  final List<PublicProduct> products;
+  final String selectedSku;
+  final String? currentCode;
+  final ValueChanged<String>? onProductChanged;
+  final ValueChanged<String>? onOpenCode;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -209,12 +247,21 @@ class _MobileMenu extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       for (final item in _menu)
-        _MobileMenuRow(
-          label: item.label,
-          url: item.path.isEmpty ? null : '$_landingUrl${item.path}',
-          current: item.path.isEmpty,
-          onPick: onPick,
-        ),
+        item.path.isEmpty
+            ? _MobileTraceMenu(
+                products: products,
+                selectedSku: selectedSku,
+                currentCode: currentCode,
+                onProductChanged: onProductChanged,
+                onOpenCode: onOpenCode,
+                onPick: onPick,
+              )
+            : _MobileMenuRow(
+                label: item.label,
+                url: '$_landingUrl${item.path}',
+                current: false,
+                onPick: onPick,
+              ),
     ],
   );
 }
@@ -254,6 +301,129 @@ class _MobileMenuRow extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+class _TraceMenuLink extends StatelessWidget {
+  const _TraceMenuLink({
+    required this.products,
+    required this.selectedSku,
+    required this.currentCode,
+    required this.onProductChanged,
+    required this.onOpenCode,
+  });
+
+  final List<PublicProduct> products;
+  final String selectedSku;
+  final String? currentCode;
+  final ValueChanged<String>? onProductChanged;
+  final ValueChanged<String>? onOpenCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Chọn lô truy xuất',
+      onSelected: (code) => onOpenCode?.call(code),
+      offset: const Offset(0, 38),
+      itemBuilder: (context) => [
+        for (final (index, product) in products.indexed) ...[
+          if (index > 0) const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            enabled: false,
+            height: 34,
+            child: Text(
+              product.name,
+              style: const TextStyle(fontWeight: FontWeight.w800, color: componentInk),
+            ),
+          ),
+          for (final batch in product.batches)
+            PopupMenuItem<String>(
+              value: batch.code,
+              child: Row(
+                children: [
+                  Icon(
+                    batch.code == currentCode?.toUpperCase()
+                        ? Icons.radio_button_checked
+                        : Icons.qr_code_2,
+                    size: 17,
+                    color: batch.code == currentCode?.toUpperCase()
+                        ? landingTeal
+                        : brandMuted,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text(batch.code)),
+                  if (batch.productionDate.isNotEmpty)
+                    Text(batch.productionDate, style: sectionCaptionStyle),
+                ],
+              ),
+            ),
+        ],
+      ],
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Truy xuất nguồn gốc', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: landingInk)),
+            SizedBox(width: 3),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: landingInk2),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileTraceMenu extends StatelessWidget {
+  const _MobileTraceMenu({
+    required this.products,
+    required this.selectedSku,
+    required this.currentCode,
+    required this.onProductChanged,
+    required this.onOpenCode,
+    required this.onPick,
+  });
+
+  final List<PublicProduct> products;
+  final String selectedSku;
+  final String? currentCode;
+  final ValueChanged<String>? onProductChanged;
+  final ValueChanged<String>? onOpenCode;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    tilePadding: EdgeInsets.zero,
+    title: const Text(
+      'Truy xuất nguồn gốc',
+      style: TextStyle(fontSize: 18, color: landingTealInk, fontWeight: FontWeight.w700),
+    ),
+    initiallyExpanded: true,
+    children: [
+      for (final product in products)
+        ExpansionTile(
+          tilePadding: const EdgeInsets.only(left: 12),
+          title: Text(product.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          initiallyExpanded: product.sku == selectedSku,
+          children: [
+            for (final batch in product.batches)
+              ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.only(left: 28, right: 8),
+                title: Text(batch.code),
+                subtitle: batch.productionDate.isEmpty ? null : Text('SX ${batch.productionDate}'),
+                trailing: batch.code == currentCode?.toUpperCase()
+                    ? const Icon(Icons.radio_button_checked, color: landingTeal)
+                    : const Icon(Icons.chevron_right, color: brandMuted),
+                onTap: () {
+                  onProductChanged?.call(product.sku);
+                  onOpenCode?.call(batch.code);
+                  onPick();
+                },
+              ),
+          ],
+        ),
+    ],
   );
 }
 

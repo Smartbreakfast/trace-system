@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/demo_data.dart';
 import '../data/trace_api.dart';
+import '../data/trace_cache.dart';
 import '../models/trace_models.dart';
 import '../ui/async_states.dart';
 import '../ui/explorer_chrome.dart';
@@ -39,14 +42,53 @@ class _ExplorerPageState extends State<ExplorerPage> {
 
   /// Vài lô đã công bố, gợi ý cho người mở trang mà chưa có mã nào trong tay.
   List<BatchRef> samples = const [];
+  List<PublicProduct> products = const [];
+  String selectedSku = 'tule-breakfast';
+  int batchPage = 0;
+  static const batchesPerPage = 3;
   String? failureMessage;
   bool verifying = false;
+
+  /// Hồ sơ đang xem lấy từ bản lưu trên máy chứ không phải từ máy chủ.
+  CachedTrace? offlineCopy;
+
+  /// Các lô đã mở trước đó, để mở lại nhanh và để xem được khi mất mạng.
+  List<CachedTrace> recent = const [];
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadSamples();
+    _loadCatalog();
+    _loadRecent();
+  }
+
+  Future<void> _loadRecent() async {
+    final items = await TraceCache.recent();
+    if (mounted) setState(() => recent = items);
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final items = await api.publicCatalog();
+      if (!mounted || items.isEmpty) return;
+      final code = widget.code?.toUpperCase();
+      final fromCode = code == null
+          ? null
+          : items
+                .where((product) => product.batches.any((batch) => batch.code == code))
+                .firstOrNull;
+    setState(() {
+        products = items;
+        selectedSku = fromCode?.sku ??
+            (items.any((item) => item.sku == selectedSku)
+                ? selectedSku
+                : items.first.sku);
+      });
+    } on TraceApiFailure {
+      // The trace itself remains usable if the optional product menu is down.
+    }
   }
 
   /// Danh sách gợi ý chỉ cần cho trang chưa tra cứu, hỏng thì im lặng bỏ qua:
@@ -101,19 +143,41 @@ class _ExplorerPageState extends State<ExplorerPage> {
     try {
       final data = await api.getTrace(code);
       if (!mounted) return;
+      final loaded = TraceRecord.fromApi(data);
       setState(() {
-        record = TraceRecord.fromApi(data);
+        record = loaded;
+        offlineCopy = null;
         phase = LoadPhase.ready;
         tab = ExplorerTab.general;
+        _selectProductForCode(widget.code);
       });
+      // Lưu bản sao để lần sau mất mạng vẫn mở lại được. Không chờ việc này:
+      // hồ sơ đã hiện rồi, lưu được hay không cũng không đổi màn hình.
+      unawaited(
+        TraceCache.save(code, loaded.batch.name, data).then((_) => _loadRecent()),
+      );
     } on TraceNotFound {
       if (!mounted) return;
       setState(() => phase = LoadPhase.notFound);
     } on TraceApiFailure catch (error) {
       if (!mounted) return;
+      // Báo lỗi trước đã. Bản lưu trên máy chỉ là lối thoát thêm, không được
+      // phép giữ người dùng ngồi chờ một lần đọc bộ nhớ.
       setState(() {
         phase = LoadPhase.failed;
         failureMessage = error.message;
+      });
+      // Mất mạng mà máy đã có bản tải trước thì mở bản đó ra, kèm nhãn nói rõ.
+      // Đây vẫn là bản ghi của chính lô này, không phải dữ liệu mẫu.
+      final saved = await TraceCache.load(code);
+      if (!mounted || saved?.data == null) return;
+      if (phase != LoadPhase.failed || widget.code != code) return;
+      setState(() {
+        record = TraceRecord.fromApi(saved!.data!);
+        offlineCopy = saved;
+        phase = LoadPhase.ready;
+        tab = ExplorerTab.general;
+        _selectProductForCode(widget.code);
       });
     }
   }
@@ -153,6 +217,38 @@ class _ExplorerPageState extends State<ExplorerPage> {
     context.go('/t/$code');
   }
 
+  PublicProduct? get _selectedProduct => products
+      .where((product) => product.sku == selectedSku)
+      .firstOrNull;
+
+  List<BatchRef> get _visibleBatches {
+    final batches = _selectedProduct?.batches ?? const <BatchRef>[];
+    final start = batchPage * batchesPerPage;
+    if (start >= batches.length) return const [];
+    final end = (start + batchesPerPage).clamp(0, batches.length);
+    return batches.sublist(start, end);
+  }
+
+  int get _batchPageCount {
+    final count = _selectedProduct?.batches.length ?? 0;
+    return count == 0 ? 1 : (count + batchesPerPage - 1) ~/ batchesPerPage;
+  }
+
+  void _changeProduct(String sku) {
+    setState(() {
+      selectedSku = sku;
+      batchPage = 0;
+    });
+  }
+
+  void _selectProductForCode(String? code) {
+    if (code == null) return;
+    final match = products
+        .where((product) => product.batches.any((batch) => batch.code == code.toUpperCase()))
+        .firstOrNull;
+    if (match != null) selectedSku = match.sku;
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = Breakpoints.isWide(context);
@@ -170,7 +266,14 @@ class _ExplorerPageState extends State<ExplorerPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Thanh điều hướng đứng yên khi cuộn, giống trang giới thiệu.
-          ExplorerHeader(onHome: () => context.go('/')),
+          ExplorerHeader(
+            onHome: () => context.go('/'),
+            products: products,
+            selectedSku: selectedSku,
+            currentCode: widget.code,
+            onProductChanged: _changeProduct,
+            onOpenCode: _openCode,
+          ),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -207,10 +310,23 @@ class _ExplorerPageState extends State<ExplorerPage> {
   }
 
   Widget _body(BuildContext context, bool wide) => switch (phase) {
-    LoadPhase.idle => SourcingSection(
-      record: null,
-      samples: samples,
-      onOpenCode: _openCode,
+    LoadPhase.idle => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (recent.isNotEmpty) ...[
+          _RecentBatches(items: recent, onOpenCode: _openCode),
+          const SizedBox(height: 26),
+        ],
+        SourcingSection(
+          record: null,
+          samples: _visibleBatches.isEmpty ? samples : _visibleBatches,
+          onOpenCode: _openCode,
+          productName: _selectedProduct?.name,
+          page: batchPage,
+          pageCount: _batchPageCount,
+          onPageChanged: (page) => setState(() => batchPage = page),
+        ),
+      ],
     ),
     LoadPhase.loading => TraceSkeleton(wide: wide),
     LoadPhase.notFound => StatusMessage(
@@ -234,7 +350,12 @@ class _ExplorerPageState extends State<ExplorerPage> {
       secondaryLabel: 'Xem hồ sơ mẫu',
       onSecondary: () => context.go('/t/$demoCode?demo=1'),
     ),
-    LoadPhase.ready => _content(context, wide, record!),
+    LoadPhase.ready => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _content(context, wide, record!),
+      ],
+    ),
   };
 
   Widget _content(BuildContext context, bool wide, TraceRecord data) => Column(
@@ -242,6 +363,10 @@ class _ExplorerPageState extends State<ExplorerPage> {
     children: [
       if (data.isDemo) ...[
         _DemoBanner(onExit: () => context.go('/')),
+        const SizedBox(height: 20),
+      ],
+      if (offlineCopy != null) ...[
+        _OfflineBanner(saved: offlineCopy!, onRetry: _load),
         const SizedBox(height: 20),
       ],
       ExplorerTabBar(
@@ -302,5 +427,118 @@ class _DemoBanner extends StatelessWidget {
         TextButton(onPressed: onExit, child: const Text('Thoát')),
       ],
     ),
+  );
+}
+
+/// Nhãn cho hồ sơ mở từ bản lưu trên máy.
+///
+/// Không giấu chuyện mất mạng: trạng thái kiểm chứng trong hồ sơ là của lúc
+/// tải về, nên phải ghi rõ thời điểm đó và chừa nút tải lại.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.saved, required this.onRetry});
+
+  final CachedTrace saved;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: brandPanel,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: landingTeal.withValues(alpha: .35)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.cloud_off_outlined, color: landingTealInk),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Đang xem bản lưu trên máy, tải lúc ${saved.savedAtText}. '
+            'Kết quả kiểm chứng bên dưới là của lần tải đó.',
+            style: const TextStyle(
+              color: landingTealInk,
+              height: 1.4,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        TextButton(onPressed: onRetry, child: const Text('Tải lại')),
+      ],
+    ),
+  );
+}
+
+/// Các lô đã mở trên máy này. Người vận hành và người mua đều hay mở lại đúng
+/// vài mã quen, và danh sách này mở được cả khi không có mạng.
+class _RecentBatches extends StatelessWidget {
+  const _RecentBatches({required this.items, required this.onOpenCode});
+
+  final List<CachedTrace> items;
+  final ValueChanged<String> onOpenCode;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'ĐÃ XEM TRÊN MÁY NÀY',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .8,
+          color: brandOrangeText,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final item in items.take(6))
+            InkWell(
+              onTap: () => onOpenCode(item.code),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: brandSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: landingLine),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.code,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: landingInk,
+                      ),
+                    ),
+                    if (item.name.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: brandMuted,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    ],
   );
 }

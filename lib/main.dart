@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'app/nav.dart';
 import 'app/url_strategy.dart';
 import 'pages/explorer_page.dart';
 import 'pages/management_page.dart';
@@ -33,6 +34,7 @@ String traceUrlFor(String code) {
 }
 
 final tuleRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/',
   routes: [
     GoRoute(
@@ -49,11 +51,15 @@ final tuleRouter = GoRouter(
         demo: state.uri.queryParameters['demo'] == '1',
       ),
     ),
-    GoRoute(
-      path: '/admin',
-      name: 'admin',
-      builder: (context, state) => const ManagementPage(),
-    ),
+    // Màn quản trị chỉ có trên bản web. Ứng dụng di động là công cụ của người
+    // mua: quét mã, đọc hồ sơ, xem lại lô đã quét. Không nhập liệu, không đăng
+    // nhập, nên cũng không có gì để lọt vào tay người tải app từ cửa hàng.
+    if (kIsWeb)
+      GoRoute(
+        path: '/admin',
+        name: 'admin',
+        builder: (context, state) => const ManagementPage(),
+      ),
   ],
   errorBuilder: (context, state) => TuleWebFrame(
     child: Center(

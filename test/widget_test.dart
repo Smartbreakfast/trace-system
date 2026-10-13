@@ -185,6 +185,16 @@ Future<void> _openOrigin(WidgetTester tester) async {
 MockClient _adminClient() => MockClient((request) async {
   final path = request.url.path;
   if (path.endsWith('/admin/session')) return _json({'ok': true});
+  if (path.endsWith('/admin/products')) {
+    return _json([
+      {
+        'id': 1,
+        'sku': 'tule-breakfast',
+        'name': 'Tú Lệ Smart Breakfast',
+        'templateKey': 'tule-breakfast',
+      },
+    ]);
+  }
   if (path.endsWith('/admin/summary')) {
     return _json({
       'products': 1,
@@ -390,6 +400,54 @@ void main() {
     expect(find.text('Cốm Tú Lệ'), findsNothing);
   });
 
+  // Bản di động hay bị quét ngay tại quầy, chỗ sóng chập chờn. Lô đã mở một
+  // lần thì vẫn xem lại được, nhưng phải nói rõ đây là bản lưu chứ không phải
+  // vừa lấy về từ máy chủ.
+  testWidgets('mất mạng mà máy đã lưu lô đó thì mở bản lưu, kèm nhãn', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'tule_trace_TL-2026-001': jsonEncode({
+        'name': 'Tú Lệ Smart Breakfast',
+        'savedAt': '2026-10-01T08:30:00.000',
+        'data': _traceJson,
+      }),
+    });
+    final api = _api(
+      MockClient((_) async => _json({'message': 'boom'}, status: 500)),
+    );
+    await tester.pumpWidget(_app(api));
+    await _settle(tester);
+
+    expect(find.textContaining('Đang xem bản lưu trên máy'), findsOneWidget);
+    expect(find.textContaining('01.10.2026'), findsOneWidget);
+  });
+
+  testWidgets('không có bản lưu thì vẫn là màn lỗi, không bịa dữ liệu', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _api(
+      MockClient((_) async => _json({'message': 'boom'}, status: 500)),
+    );
+    await tester.pumpWidget(_app(api));
+    await _settle(tester);
+
+    expect(find.textContaining('Đang xem bản lưu trên máy'), findsNothing);
+    expect(find.text('Không kết nối được máy chủ truy xuất'), findsOneWidget);
+  });
+
+  // Ứng dụng cửa hàng chỉ là công cụ của người mua. Test chạy trên Dart VM nên
+  // kIsWeb bằng false, đúng bằng điều kiện của bản Android và iOS.
+  test('bản di động không khai route màn quản trị', () {
+    final paths = tuleRouter.configuration.routes
+        .whereType<GoRoute>()
+        .map((route) => route.path)
+        .toList();
+    expect(paths, contains('/t/:code'));
+    expect(paths, isNot(contains('/admin')));
+  });
+
   testWidgets('chế độ demo luôn kèm cảnh báo dữ liệu không thật', (
     tester,
   ) async {
@@ -501,6 +559,16 @@ void main() {
     final client = MockClient((request) async {
       final path = request.url.path;
       if (path.endsWith('/admin/session')) return _json({'ok': true});
+      if (path.endsWith('/admin/products')) {
+        return _json([
+          {
+            'id': 1,
+            'sku': 'tule-breakfast',
+            'name': 'Tú Lệ Smart Breakfast',
+            'templateKey': 'tule-breakfast',
+          },
+        ]);
+      }
       if (path.endsWith('/admin/summary')) return _json({'products': 30});
       if (path.endsWith('/admin/product-batches')) {
         calls.add(request.url);
@@ -890,6 +958,16 @@ void main() {
       final path = request.url.path;
       paths.add(path);
       if (path.endsWith('/admin/session')) return _json({'ok': true});
+      if (path.endsWith('/admin/products')) {
+        return _json([
+          {
+            'id': 1,
+            'sku': 'tule-breakfast',
+            'name': 'Tú Lệ Smart Breakfast',
+            'templateKey': 'tule-breakfast',
+          },
+        ]);
+      }
       if (path.endsWith('/admin/summary')) return _json({'products': 1});
       if (path.endsWith('/admin/chain')) {
         return _json({'configured': false, 'reachable': false, 'outbox': {}});

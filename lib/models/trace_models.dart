@@ -255,6 +255,7 @@ class Ingredient {
     this.latitude,
     this.longitude,
     this.areaGeoJson,
+    this.sourceBatch,
   });
 
   final Object? id;
@@ -283,6 +284,7 @@ class Ingredient {
 
   /// Vùng nguyên liệu do nhà sản xuất tự khoanh trên bản đồ, dạng GeoJSON.
   final String? areaGeoJson;
+  final BatchRef? sourceBatch;
 
   List<String> get stepTitles => [for (final e in events) e.title];
 
@@ -306,6 +308,9 @@ class Ingredient {
       latitude: _num(json, ['latitude']),
       longitude: _num(json, ['longitude']),
       areaGeoJson: _str(json, ['area_geojson', 'areaGeoJson']),
+      sourceBatch: json['sourceBatch'] is Map<String, dynamic>
+          ? BatchRef.fromApi(json['sourceBatch'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -469,6 +474,57 @@ class BatchRef {
   );
 }
 
+class ProductCatalog {
+  const ProductCatalog({
+    required this.id,
+    required this.sku,
+    required this.name,
+    this.description = '',
+    this.templateKey = '',
+  });
+
+  final Object? id;
+  final String sku;
+  final String name;
+  final String description;
+  final String templateKey;
+
+  factory ProductCatalog.fromApi(Map<String, dynamic> json) => ProductCatalog(
+    id: json['id'],
+    sku: _str(json, ['sku']),
+    name: _str(json, ['name'], or: 'Sản phẩm chưa đặt tên'),
+    description: _str(json, ['description']),
+    templateKey: _str(json, ['templateKey', 'template_key']),
+  );
+}
+
+class PublicProduct {
+  const PublicProduct({
+    required this.sku,
+    required this.name,
+    this.description = '',
+    this.templateKey = '',
+    this.batches = const [],
+  });
+
+  final String sku;
+  final String name;
+  final String description;
+  final String templateKey;
+  final List<BatchRef> batches;
+
+  factory PublicProduct.fromApi(Map<String, dynamic> json) => PublicProduct(
+    sku: _str(json, ['sku']),
+    name: _str(json, ['name'], or: 'Sản phẩm chưa đặt tên'),
+    description: _str(json, ['description']),
+    templateKey: _str(json, ['templateKey', 'template_key']),
+    batches: [
+      for (final item in (json['batches'] as List<dynamic>? ?? const []))
+        if (item is Map<String, dynamic>) BatchRef.fromApi(item),
+    ],
+  );
+}
+
 class TraceRecord {
   const TraceRecord({
     required this.batch,
@@ -599,6 +655,8 @@ class BatchListItem {
     this.ingredientCount = 0,
     this.eventCount = 0,
     this.version,
+    this.productName = '',
+    this.productSku = '',
   });
 
   final String code;
@@ -611,6 +669,8 @@ class BatchListItem {
   final int ingredientCount;
   final int eventCount;
   final int? version;
+  final String productName;
+  final String productSku;
 
   /// dd.MM.yyyy cho dễ đọc; chuỗi lạ thì trả nguyên văn còn hơn trả rỗng.
   String get createdLabel {
@@ -632,5 +692,7 @@ class BatchListItem {
     ingredientCount: json['ingredientCount'] as int? ?? 0,
     eventCount: json['eventCount'] as int? ?? 0,
     version: json['version'] as int?,
+    productName: _str(json, ['product_name', 'productName']),
+    productSku: _str(json, ['product_sku', 'productSku']),
   );
 }

@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["THAYBANGTEAMID.store.smartbreakfast.trace"],
+        "components": [
+          { "/": "/t/*", "comment": "Ho so tung lo hang" }
+        ]
+      }
+    ]
+  }
+}

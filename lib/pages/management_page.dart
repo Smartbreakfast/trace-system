@@ -15,6 +15,20 @@ import '../ui/media_manager.dart';
 import '../ui/shared_components.dart';
 import '../ui/trace_components.dart';
 
+String shortProductPrefix(ProductCatalog product) {
+  if (product.sku == 'tule-breakfast') return 'TL';
+  if (product.sku.startsWith('tule-breakfast-')) return 'TL';
+  final words = product.sku
+      .split('-')
+      .where((word) => word.isNotEmpty)
+      .toList();
+  final prefix = words.map((word) => word[0]).join().toUpperCase();
+  return (prefix.isEmpty ? 'PRD' : prefix).substring(
+    0,
+    prefix.isEmpty ? 3 : (prefix.length > 3 ? 3 : prefix.length),
+  );
+}
+
 /// Màn vận hành.
 ///
 /// Chỉ có hai mục và một luồng: chọn hoặc tạo một lô, rồi làm mọi việc của lô
@@ -42,6 +56,7 @@ class _ManagementPageState extends State<ManagementPage> {
   bool loadingSummary = true;
 
   List<BatchListItem> batches = const [];
+  List<ProductCatalog> products = const [];
   bool loadingBatches = true;
   String? listError;
 
@@ -49,6 +64,7 @@ class _ManagementPageState extends State<ManagementPage> {
   /// tự, không phải chỉ đúng trong đám vừa tải về.
   final searchController = TextEditingController();
   String searchTerm = '';
+  String productSku = '';
   String sort = 'newest';
   int page = 1;
   int pages = 1;
@@ -145,7 +161,16 @@ class _ManagementPageState extends State<ManagementPage> {
   // --------------------------------------------------------------- dữ liệu
 
   Future<void> _refresh() async {
-    await Future.wait([_loadSummary(), _loadBatches(), _loadChain()]);
+    await Future.wait([_loadSummary(), _loadBatches(), _loadProducts(), _loadChain()]);
+  }
+
+  Future<void> _loadProducts() async {
+    try {
+      final data = await api.listProducts();
+      if (mounted) setState(() => products = data);
+    } on TraceApiFailure {
+      if (mounted) setState(() => products = const []);
+    }
   }
 
   /// Trạng thái ví neo dữ liệu. Hỏng thì để trống: nó là thông tin phụ, không
@@ -203,6 +228,7 @@ class _ManagementPageState extends State<ManagementPage> {
     try {
       final result = await api.listBatches(
         query: searchTerm,
+        productSku: productSku,
         sort: sort,
         page: page,
       );
@@ -243,6 +269,14 @@ class _ManagementPageState extends State<ManagementPage> {
   void _onSortChanged(String value) {
     setState(() {
       sort = value;
+      page = 1;
+    });
+    _loadBatches();
+  }
+
+  void _onProductChanged(String value) {
+    setState(() {
+      productSku = value;
       page = 1;
     });
     _loadBatches();
@@ -461,10 +495,17 @@ class _ManagementPageState extends State<ManagementPage> {
   Widget _batchList() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Expanded(child: Text('Lô sản phẩm', style: pageTitleStyle)),
+          const Text('Lô sản phẩm', style: pageTitleStyle),
+          OutlinedButton.icon(
+            onPressed: _createCatalogProduct,
+            icon: const Icon(Icons.category_outlined, size: 18),
+            label: const Text('Thêm sản phẩm'),
+          ),
           FilledButton.icon(
             onPressed: _createBatch,
             icon: const Icon(Icons.add, size: 18),
@@ -480,6 +521,26 @@ class _ManagementPageState extends State<ManagementPage> {
         onSort: _onSortChanged,
         total: total,
       ),
+      if (products.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        SizedBox(
+          width: 280,
+          child: DropdownButtonFormField<String>(
+            initialValue: productSku.isEmpty ? null : productSku,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Lọc theo sản phẩm',
+              prefixIcon: Icon(Icons.category_outlined, size: 18),
+            ),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Tất cả sản phẩm')),
+              for (final product in products)
+                DropdownMenuItem(value: product.sku, child: Text(product.name)),
+            ],
+            onChanged: (value) => _onProductChanged(value ?? ''),
+          ),
+        ),
+      ],
       const SizedBox(height: 16),
       _batchRows(),
       if (pages > 1) ...[
@@ -492,6 +553,24 @@ class _ManagementPageState extends State<ManagementPage> {
       ],
     ],
   );
+
+  Future<void> _createCatalogProduct() async {
+    final result = await ProductCreateDialog.show(context);
+    if (result == null) return;
+    try {
+      final created = await api.createCatalogProduct(
+        sku: result.sku,
+        name: result.name,
+        description: result.description,
+        templateKey: result.templateKey,
+      );
+      if (created == null) throw const TraceRequestRejected('Không tạo được sản phẩm.');
+      await _loadProducts();
+      _notify('Đã thêm sản phẩm ${created.name}.');
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
+  }
 
   Widget _batchRows({int? limit}) {
     if (loadingBatches) {
@@ -554,11 +633,20 @@ class _ManagementPageState extends State<ManagementPage> {
   }
 
   Future<void> _createBatch() async {
+    if (products.isEmpty) {
+      _notify(
+        'Chưa tải được catalog sản phẩm. Tải lại trước khi tạo lô.',
+        danger: true,
+      );
+      return;
+    }
+    final availableProducts = products;
     final result = await BatchCreateDialog.show(
       context,
+      products: availableProducts,
       existingCodes: [for (final batch in batches) batch.code],
       suggestedCode:
-          'TL-${DateTime.now().year}-'
+          '${shortProductPrefix(availableProducts.first)}-${DateTime.now().year}-'
           '${(batches.length + 1).toString().padLeft(3, '0')}',
     );
     if (result == null) return;

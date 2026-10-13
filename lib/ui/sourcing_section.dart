@@ -22,12 +22,20 @@ class SourcingSection extends StatefulWidget {
     required this.record,
     this.samples = const [],
     this.onOpenCode,
+    this.productName,
+    this.page = 0,
+    this.pageCount = 1,
+    this.onPageChanged,
     super.key,
   });
 
   /// Vài lô đã công bố, chỉ dùng ở trạng thái chưa tra cứu.
   final List<BatchRef> samples;
   final void Function(String code)? onOpenCode;
+  final String? productName;
+  final int page;
+  final int pageCount;
+  final ValueChanged<int>? onPageChanged;
 
   /// Null nghĩa là chưa tra cứu lô nào. Khung vẫn dựng y hệt, chỉ là sơ đồ
   /// chưa có gì và panel là lời mời nhập mã. Đổi layout giữa hai trạng thái
@@ -77,6 +85,10 @@ class _SourcingSectionState extends State<SourcingSection> {
           ? EmptyResultPanel(
               samples: widget.samples,
               onOpenCode: widget.onOpenCode,
+              productName: widget.productName,
+              page: widget.page,
+              pageCount: widget.pageCount,
+              onPageChanged: widget.onPageChanged,
             )
           : _ResultBody(
               record: record,
@@ -621,6 +633,8 @@ class _IngredientDetail extends StatelessWidget {
               InfoPill(label: 'THU HOẠCH', value: ingredient.harvestDate),
             if (ingredient.receivedDate.isNotEmpty)
               InfoPill(label: 'NHẬP KHO', value: ingredient.receivedDate),
+            if (ingredient.sourceBatch case final source?)
+              InfoPill(label: 'LÔ NGUỒN', value: source.code),
           ],
         ),
         if (ingredient.photos.isNotEmpty) ...[
@@ -1022,10 +1036,22 @@ class _EventRow extends StatelessWidget {
 /// Giữ đúng chỗ của panel kết quả để trang không đổi bố cục lúc kết quả về:
 /// chỉ nội dung bên trong đổi, khung bên trái đứng yên.
 class EmptyResultPanel extends StatelessWidget {
-  const EmptyResultPanel({this.samples = const [], this.onOpenCode, super.key});
+  const EmptyResultPanel({
+    this.samples = const [],
+    this.onOpenCode,
+    this.productName,
+    this.page = 0,
+    this.pageCount = 1,
+    this.onPageChanged,
+    super.key,
+  });
 
   final List<BatchRef> samples;
   final void Function(String code)? onOpenCode;
+  final String? productName;
+  final int page;
+  final int pageCount;
+  final ValueChanged<int>? onPageChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -1056,13 +1082,62 @@ class EmptyResultPanel extends StatelessWidget {
         const SizedBox(height: 22),
         Container(height: 1, color: brandLine),
         const SizedBox(height: 16),
-        const PanelEyebrow('Lô đã công bố'),
+        PanelEyebrow(productName == null ? 'Lô đã công bố' : 'Lô ${productName!}'),
         const SizedBox(height: 10),
         for (final item in samples) ...[
           _SampleRow(batch: item, onTap: onOpenCode),
           const SizedBox(height: 8),
         ],
+        if (pageCount > 1) ...[
+          const SizedBox(height: 4),
+          _BatchPagination(
+            page: page,
+            pageCount: pageCount,
+            onPageChanged: onPageChanged,
+          ),
+        ],
       ],
+    ],
+  );
+}
+
+class _BatchPagination extends StatelessWidget {
+  const _BatchPagination({
+    required this.page,
+    required this.pageCount,
+    this.onPageChanged,
+  });
+
+  final int page;
+  final int pageCount;
+  final ValueChanged<int>? onPageChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text('Trang ${page + 1} / $pageCount', style: sectionCaptionStyle),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Trang trước',
+            visualDensity: VisualDensity.compact,
+            onPressed: page > 0 && onPageChanged != null
+                ? () => onPageChanged!(page - 1)
+                : null,
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          IconButton(
+            tooltip: 'Trang sau',
+            visualDensity: VisualDensity.compact,
+            onPressed: page + 1 < pageCount && onPageChanged != null
+                ? () => onPageChanged!(page + 1)
+                : null,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
     ],
   );
 }

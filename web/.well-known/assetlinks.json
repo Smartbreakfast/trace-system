@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "store.smartbreakfast.trace",
+      "sha256_cert_fingerprints": [
+        "THAY_BANG_VAN_TAY_SHA256_CUA_KHOA_KY"
+      ]
+    }
+  }
+]
