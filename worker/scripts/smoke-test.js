@@ -42,6 +42,9 @@ const PNG = Buffer.from(
   assert.equal(health.database, 'd1');
   assert.equal(health.storage, 'r2');
 
+  const catalog = await get('/api/admin/products', true);
+  assert.ok(catalog.some((item) => item.sku === 'tule-breakfast'));
+
   // Quản trị phải đóng với người lạ.
   assert.equal((await call('GET', '/api/admin/summary')).status, 401);
   assert.equal(
@@ -84,6 +87,14 @@ const PNG = Buffer.from(
   // Đủ 22 bước của sơ đồ cộng 2 bước ở xưởng; con số đổi khi quy trình đổi.
   assert.equal(batches.items[0].eventCount, 24);
   assert.ok(batches.items[0].created_at, 'danh sách phải kèm ngày tạo');
+  const filtered = await get(
+    '/api/admin/product-batches?productSku=tule-breakfast',
+    true,
+  );
+  assert.ok(
+    filtered.items.some((item) => item.code === CODE),
+    'lọc theo product phải giữ lại batch thuộc product',
+  );
 
   // Phân trang: limit 1 thì mỗi trang đúng một lô, và trang vượt quá số trang
   // hiện có phải kéo về trang cuối thay vì trả danh sách rỗng.
@@ -110,6 +121,7 @@ const PNG = Buffer.from(
         admin: true,
         body: {
           name: 'Trùng mã',
+          productId: catalog.find((item) => item.sku === 'tule-breakfast').id,
           code: CODE,
           productionDate: '01.01.2026',
           expiryDate: '01.01.2027',
@@ -117,6 +129,33 @@ const PNG = Buffer.from(
       })
     ).status,
     409,
+  );
+  assert.equal(
+    (
+      await call('POST', '/api/admin/product-batches', {
+        admin: true,
+        body: {
+          name: 'Thiếu product',
+          code: 'TL-SMOKE-NOPRODUCT',
+          productionDate: '01.01.2026',
+          expiryDate: '01.01.2027',
+        },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call('POST', '/api/admin/products', {
+        admin: true,
+        body: {
+          sku: 'invalid-template-smoke',
+          name: 'Template sai',
+          templateKey: 'not-registered',
+        },
+      })
+    ).status,
+    400,
   );
 
   // Sửa thông tin lô và xoá nguyên liệu là hai việc mà màn quản trị cần.

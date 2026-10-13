@@ -74,4 +74,13 @@ export interface BatchRef {
   code: unknown;
   name: unknown;
   productionDate?: unknown;
+  status?: unknown;
+}
+
+export interface PublicProduct {
+  sku: string;
+  name: string;
+  description?: string;
+  templateKey?: string;
+  batches: BatchRef[];
 }

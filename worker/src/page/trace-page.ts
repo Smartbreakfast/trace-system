@@ -6,6 +6,7 @@
 
 import { esc, join, pill, eyebrow, heading } from './html';
 import { shell } from './shell';
+import { productMenu } from './home-page';
 import { treeSvg, accents } from './tree';
 import {
   iconAward,
@@ -23,7 +24,7 @@ import {
   iconVerified,
   ingredientIcon,
 } from './icons';
-import type { MediaItem, ProcessEventItem, PublicTrace } from './types';
+import type { MediaItem, ProcessEventItem, PublicProduct, PublicTrace } from './types';
 
 export type TabName = 'general' | 'origin' | 'quality';
 
@@ -462,7 +463,7 @@ function integrityBar(record: PublicTrace): string {
 
 // ----------------------------------------------------------------- trang
 
-export function renderTrace(record: PublicTrace, tab: TabName, origin: string): string {
+export function renderTrace(record: PublicTrace, tab: TabName, origin: string, products: PublicProduct[] = []): string {
   const cover = first(record.media, 'cover');
   const tabs =
     '<nav class="tabs">' +
@@ -487,6 +488,7 @@ export function renderTrace(record: PublicTrace, tab: TabName, origin: string): 
 
   const body =
     '<main class="wrap">' +
+    productMenu(products, record.code) +
     tabs +
     panel('general', generalPanel(record)) +
     panel('origin', originPanel(record)) +

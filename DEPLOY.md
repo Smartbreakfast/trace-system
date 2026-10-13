@@ -50,18 +50,21 @@ ghi lên chuỗi mang chữ ký của nó, nên đừng dùng chung với ví gi
 npx wrangler secret put PRIVATE_KEY
 ```
 
-Tạo bảng và nạp lô mẫu:
+Tạo database mới và nạp bộ dữ liệu demo chuẩn:
 
 ```bash
 npm run db:remote
-npm run db:seed:remote     # tuỳ chọn, bỏ qua nếu muốn bắt đầu trắng
+npm run db:seed:remote
 ```
 
-Nếu database đã tạo từ trước khi có bản đồ, chạy thêm migration để bổ sung cột
-toạ độ (chạy nhiều lần sẽ báo lỗi cột đã tồn tại, đó là bình thường):
+`schema.sql` là schema đầy đủ cho database mới. Không chạy toàn bộ migration
+history ngay sau `db:remote`, vì schema bootstrap đã chứa các cột đó.
+
+Với database hiện hữu đang chạy schema cũ, chạy migration sản phẩm riêng sau khi
+đã kiểm tra backup:
 
 ```bash
-npm run db:migrate:remote
+npm run db:migrate:product:remote
 ```
 
 ## 2. Deploy

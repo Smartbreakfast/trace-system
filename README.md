@@ -7,7 +7,7 @@ Người mua quét mã QR trên bao bì để xem lô mình đang cầm: nguyên
 vùng nào, đi qua những công đoạn nào, ai làm, ảnh chụp tại chỗ, hồ sơ kiểm
 nghiệm — và tự kiểm chứng được rằng hồ sơ đó không bị sửa sau ngày công bố.
 
-Đang chạy thật tại **https://trace.smartbreakfast.store**
+Đang chạy bản demo tại **https://trace.smartbreakfast.store**
 
 ---
 
@@ -106,10 +106,15 @@ nghệ.
 
 ## 6. Kết quả hiện tại
 
-**Dữ liệu thật đang chạy**: 4 lô đã công bố, mỗi lô 4 vùng nguyên liệu và 26
-công đoạn (24 công đoạn thuộc các nhánh nguyên liệu, cộng phối trộn và đóng
-gói), 36 ảnh minh chứng. Cả 4 lô đều ở trạng thái ĐÃ XÁC MINH và có giao dịch
-đã xác nhận trên Besu.
+**Dữ liệu demo đang chạy**: các lô, vùng nguyên liệu, công đoạn và media trong
+seed là dữ liệu minh hoạ để kiểm tra luồng truy xuất. Không dùng chúng như tuyên
+bố về nguồn gốc sản phẩm thật.
+
+Môi trường demo hiện có các product catalog nhiều thành phần; mỗi product có thể
+được tạo batch riêng và công bố độc lập.
+
+Các số liệu benchmark bên dưới là số liệu của bộ dữ liệu demo trước đây, không
+phải số liệu sản xuất hiện tại.
 
 **Tốc độ mở trang** — trước đây trang truy xuất chạy bằng Flutter Web; đo lại
 trên cùng một lô, cùng một máy sau khi chuyển sang HTML dựng sẵn:

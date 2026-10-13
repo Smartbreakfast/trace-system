@@ -1,8 +1,20 @@
 -- Schema D1 cho Tú Lệ Trace. D1 chạy SQLite nên gần như giữ nguyên schema cũ,
 -- phần thêm mới là bảng media_assets cho ảnh, video và hồ sơ kiểm nghiệm.
 
+CREATE TABLE IF NOT EXISTS products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  template_key TEXT NOT NULL DEFAULT '',
+  product_kind TEXT NOT NULL DEFAULT 'finished',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS product_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER REFERENCES products(id),
   name TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
   production_date TEXT NOT NULL,
@@ -35,7 +47,8 @@ CREATE TABLE IF NOT EXISTS ingredient_batches (
   -- Vùng nguyên liệu do nhà sản xuất tự khoanh trên bản đồ, GeoJSON Polygon
   -- hoặc MultiPolygon. Có giá trị thì nó thắng bán kính, vì đây mới là hình
   -- thật của vùng thu mua chứ không phải một vòng tròn xấp xỉ.
-  area_geojson TEXT
+  area_geojson TEXT,
+  source_product_batch_id INTEGER REFERENCES product_batches(id)
 );
 
 CREATE TABLE IF NOT EXISTS process_events (
@@ -97,6 +110,7 @@ CREATE TABLE IF NOT EXISTS blockchain_outbox (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ingredients_product ON ingredient_batches(product_batch_id);
+CREATE INDEX IF NOT EXISTS idx_batches_product ON product_batches(product_id);
 CREATE INDEX IF NOT EXISTS idx_events_ingredient ON process_events(ingredient_batch_id);
 CREATE INDEX IF NOT EXISTS idx_media_owner ON media_assets(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_product ON published_snapshots(product_batch_id, version DESC);

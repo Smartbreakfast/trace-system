@@ -2,6 +2,7 @@ import { sha256Of } from './canonical';
 import { anchorBatch, chainConfig } from './chain';
 import type { Env } from './env';
 import { ApiError } from './errors';
+import type { PublicProduct } from './page/types';
 
 export type Row = Record<string, unknown>;
 
@@ -145,7 +146,10 @@ async function loadTree(db: D1Database, productId: number) {
   );
   const ingredients = await all(
     db,
-    'SELECT * FROM ingredient_batches WHERE product_batch_id = ? ORDER BY id',
+    `SELECT i.*, s.code as source_batch_code, s.name as source_batch_name
+       FROM ingredient_batches i
+       LEFT JOIN product_batches s ON s.id = i.source_product_batch_id
+      WHERE i.product_batch_id = ? ORDER BY i.id`,
     productId,
   );
   const ingredientIds = ingredients.map((item) => Number(item.id));
@@ -217,6 +221,14 @@ export async function snapshotPayload(db: D1Database, productId: number) {
       latitude: item.latitude,
       longitude: item.longitude,
       areaGeoJson: item.area_geojson,
+      ...(item.source_batch_code
+        ? {
+            sourceBatch: {
+              code: item.source_batch_code,
+              name: item.source_batch_name,
+            },
+          }
+        : {}),
       media: snapshotMedia(tree.ingredientMedia.get(Number(item.id))),
       processEvents: tree.events
         .filter((event) => event.ingredient_batch_id === item.id)
@@ -310,6 +322,14 @@ export async function adminTrace(db: D1Database, code: string, env?: Env) {
     media: (tree.productMedia.get(productId) ?? []).map(publicMedia),
     ingredients: tree.ingredients.map((item) => ({
       ...item,
+      ...(item.source_batch_code
+        ? {
+            sourceBatch: {
+              code: item.source_batch_code,
+              name: item.source_batch_name,
+            },
+          }
+        : {}),
       media: (tree.ingredientMedia.get(Number(item.id)) ?? []).map(publicMedia),
       processEvents: tree.events
         .filter((event) => event.ingredient_batch_id === item.id)
@@ -356,6 +376,78 @@ export async function publicBatches(db: D1Database, limit = 6) {
     name: row.name,
     productionDate: row.production_date,
   }));
+}
+
+/** Danh mục thành phẩm và các mã lô để trang khách hàng chọn sản phẩm. */
+export async function publicCatalog(db: D1Database): Promise<PublicProduct[]> {
+  const rows = await all(
+    db,
+    `SELECT c.sku, c.name AS product_name, c.description, c.template_key,
+            p.code, p.name, p.production_date, p.status
+       FROM products c
+       LEFT JOIN product_batches p ON p.product_id = c.id
+      WHERE c.status = 'ACTIVE' AND c.product_kind = 'finished'
+      ORDER BY CASE c.sku WHEN 'tule-breakfast' THEN 0 ELSE 1 END,
+               c.name COLLATE NOCASE, p.id DESC`,
+  );
+  const products = new Map<string, Row>();
+  for (const row of rows) {
+    const sku = String(row.sku);
+    const product = products.get(sku) ?? {
+      sku,
+      name: row.product_name,
+      description: row.description,
+      templateKey: row.template_key,
+      batches: [],
+    };
+    if (row.code) {
+      (product.batches as Row[]).push({
+        code: row.code,
+        name: row.name,
+        productionDate: row.production_date,
+        status: row.status,
+      });
+    }
+    products.set(sku, product);
+  }
+  return [...products.values()] as unknown as PublicProduct[];
+}
+
+/** Catalog sản phẩm cho Management. Không expose các trường vận hành nhạy cảm. */
+export async function listProducts(db: D1Database) {
+  return all(
+    db,
+    `SELECT id, sku, name, description, template_key as templateKey, status
+       FROM products
+      WHERE status = 'ACTIVE'
+      ORDER BY name COLLATE NOCASE, id`,
+  );
+}
+
+export async function createCatalogProduct(
+  db: D1Database,
+  body: { sku: string; name: string; description?: string; templateKey?: string },
+) {
+  const sku = body.sku.trim().toLowerCase();
+  const duplicate = await first(db, 'SELECT id FROM products WHERE sku = ?', sku);
+  if (duplicate) {
+    throw new ApiError(409, 'SKU_TAKEN', `Mã sản phẩm ${sku} đã tồn tại.`);
+  }
+  const row = await db
+    .prepare(
+      `INSERT INTO products (sku, name, description, template_key, status, created_at)
+       VALUES (?, ?, ?, ?, 'ACTIVE', ?) RETURNING id, sku, name, description,
+       template_key as templateKey, status`,
+    )
+    .bind(
+      sku,
+      body.name.trim(),
+      body.description ?? '',
+      body.templateKey ?? '',
+      nowIso(),
+    )
+    .first<Row>();
+  return row;
 }
 
 export async function featured(db: D1Database) {
@@ -599,8 +691,9 @@ export async function outboxSummary(db: D1Database) {
 }
 
 export async function summary(db: D1Database) {
-  const [products, published, ingredients, events, media, pending] =
+  const [products, batches, published, ingredients, events, media, pending] =
     await Promise.all([
+      count(db, 'SELECT COUNT(*) as count FROM products'),
       count(db, 'SELECT COUNT(*) as count FROM product_batches'),
       count(
         db,
@@ -616,6 +709,8 @@ export async function summary(db: D1Database) {
     ]);
   return {
     products,
+    productCount: products,
+    batchCount: batches,
     published,
     ingredients,
     events,
@@ -635,19 +730,39 @@ const BATCH_ORDER: Record<string, string> = {
 
 export async function listBatches(
   db: D1Database,
-  options: { q?: string; sort?: string; page?: number; limit?: number } = {},
+  options: {
+    q?: string;
+    productSku?: string;
+    sort?: string;
+    page?: number;
+    limit?: number;
+  } = {},
 ) {
   const order = BATCH_ORDER[options.sort ?? 'newest'] ?? BATCH_ORDER.newest;
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 100);
   const page = Math.max(options.page ?? 1, 1);
 
   const term = (options.q ?? '').trim().toLowerCase();
-  const where = term ? 'WHERE lower(p.code) LIKE ?1 OR lower(p.name) LIKE ?1' : '';
-  const args = term ? [`%${term}%`] : [];
+  const conditions: string[] = [];
+  const args: unknown[] = [];
+  if (term) {
+    conditions.push(
+      "(lower(p.code) LIKE ? OR lower(p.name) LIKE ? OR lower(COALESCE(c.name, '')) LIKE ?)",
+    );
+    args.push(`%${term}%`, `%${term}%`, `%${term}%`);
+  }
+  const sku = (options.productSku ?? '').trim().toLowerCase();
+  if (sku) {
+    conditions.push('c.sku = ?');
+    args.push(sku);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const counted = await first(
     db,
-    `SELECT COUNT(*) as total FROM product_batches p ${where}`,
+    `SELECT COUNT(*) as total FROM product_batches p
+       LEFT JOIN products c ON c.id = p.product_id
+       ${where}`,
     ...args,
   );
   const total = Number(counted?.total ?? 0);
@@ -659,13 +774,14 @@ export async function listBatches(
 
   const items = await all(
     db,
-    `SELECT p.*,
+    `SELECT p.*, c.name as product_name, c.sku as product_sku,
         (SELECT COUNT(*) FROM ingredient_batches i WHERE i.product_batch_id = p.id) AS ingredientCount,
         (SELECT COUNT(*) FROM process_events e
            JOIN ingredient_batches i ON i.id = e.ingredient_batch_id
           WHERE i.product_batch_id = p.id) AS eventCount,
         (SELECT MAX(version) FROM published_snapshots s WHERE s.product_batch_id = p.id) AS version
        FROM product_batches p
+       LEFT JOIN products c ON c.id = p.product_id
        ${where}
       ORDER BY ${order}
       LIMIT ? OFFSET ?`,
@@ -699,6 +815,7 @@ export async function snapshots(db: D1Database, code: string) {
 export async function createProduct(
   db: D1Database,
   body: {
+    productId: number;
     name: string;
     code: string;
     productionDate: string;
@@ -722,11 +839,20 @@ export async function createProduct(
       `Mã lô ${code} đã tồn tại. Chọn mã khác.`,
     );
   }
+  const catalog = await first(
+    db,
+    "SELECT id FROM products WHERE id = ? AND status = 'ACTIVE'",
+    body.productId,
+  );
+  if (!catalog) {
+    throw new ApiError(404, 'PRODUCT_NOT_FOUND', 'Sản phẩm trong catalog không tồn tại.');
+  }
   const result = await db
     .prepare(
-      'INSERT INTO product_batches (name, code, production_date, expiry_date, description, status, facility_name, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+      'INSERT INTO product_batches (product_id, name, code, production_date, expiry_date, description, status, facility_name, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
     )
     .bind(
+      body.productId,
       body.name.trim(),
       code,
       body.productionDate,
@@ -787,6 +913,7 @@ export async function createIngredient(
     latitude?: number | null;
     longitude?: number | null;
     areaGeoJson?: string | null;
+    sourceProductBatchId?: number;
   },
 ) {
   const parent = await first(
@@ -797,9 +924,21 @@ export async function createIngredient(
   if (!parent) {
     throw new ApiError(404, 'BATCH_NOT_FOUND', 'Lô thành phẩm không tồn tại.');
   }
+  if (body.sourceProductBatchId != null) {
+    const source = await first(
+      db,
+      `SELECT p.id FROM product_batches p
+        JOIN products c ON c.id = p.product_id
+       WHERE p.id = ? AND c.product_kind = 'ingredient'`,
+      body.sourceProductBatchId,
+    );
+    if (!source) {
+      throw new ApiError(404, 'SOURCE_BATCH_NOT_FOUND', 'Batch nguyên liệu nguồn không tồn tại.');
+    }
+  }
   const result = await db
     .prepare(
-      'INSERT INTO ingredient_batches (product_batch_id, name, origin, supplier, harvest_date, received_date, summary, latitude, longitude, area_geojson) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+      'INSERT INTO ingredient_batches (product_batch_id, name, origin, supplier, harvest_date, received_date, summary, latitude, longitude, area_geojson, source_product_batch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
     )
     .bind(
       body.productBatchId,
@@ -812,6 +951,7 @@ export async function createIngredient(
       body.latitude ?? null,
       body.longitude ?? null,
       body.areaGeoJson ?? null,
+      body.sourceProductBatchId ?? null,
     )
     .first<Row>();
   return { id: result?.id, ...body };
@@ -836,7 +976,7 @@ export async function updateIngredient(
   }
   await db
     .prepare(
-      'UPDATE ingredient_batches SET name = ?, origin = ?, supplier = ?, harvest_date = ?, received_date = ?, summary = ?, latitude = ?, longitude = ?, area_geojson = ? WHERE id = ?',
+       'UPDATE ingredient_batches SET name = ?, origin = ?, supplier = ?, harvest_date = ?, received_date = ?, summary = ?, latitude = ?, longitude = ?, area_geojson = ?, source_product_batch_id = ? WHERE id = ?',
     )
     .bind(
       body.name ?? existing.name,
@@ -850,6 +990,9 @@ export async function updateIngredient(
       body.areaGeoJson === undefined
         ? existing.area_geojson
         : body.areaGeoJson,
+      body.sourceProductBatchId === undefined
+        ? existing.source_product_batch_id
+        : body.sourceProductBatchId,
       id,
     )
     .run();

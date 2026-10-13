@@ -2,7 +2,25 @@
 
 import { esc, eyebrow, heading } from './html';
 import { shell } from './shell';
-import type { BatchRef } from './types';
+import type { BatchRef, PublicProduct } from './types';
+
+export function productMenu(products: PublicProduct[], currentCode = ''): string {
+  if (products.length === 0) return '';
+  return (
+    '<section class="product-menu" aria-label="Chọn sản phẩm" style="margin:24px 0 0;padding:20px;border:1px solid #DDE6E0;border-radius:18px;background:#fff">' +
+    '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#315D48">CHỌN SẢN PHẨM</div>' +
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">' +
+    products.map((product) => {
+      const active = product.batches.some((batch) => String(batch.code) === currentCode) ||
+        (!currentCode && product.sku === 'tule-breakfast');
+      return `<a href="/t/${encodeURIComponent(String(product.batches[0]?.code ?? ''))}" style="display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;text-decoration:none;border:1px solid ${active ? '#17352A' : '#DDE6E0'};background:${active ? '#17352A' : '#fff'};color:${active ? '#fff' : '#17352A'}">${esc(product.name)} <span style="opacity:.7;margin-left:7px">${product.batches.length} lô</span></a>`;
+    }).join('') +
+    '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
+    products.flatMap((product) => product.batches).map((batch) => `<a class="chip" href="/t/${encodeURIComponent(String(batch.code))}">${esc(String(batch.code))}</a>`).join('') +
+    '</div></section>'
+  );
+}
 
 function sampleList(samples: BatchRef[]): string {
   if (samples.length === 0) return '';
@@ -23,7 +41,7 @@ function sampleList(samples: BatchRef[]): string {
   );
 }
 
-export function renderHome(samples: BatchRef[], origin: string, error = ''): string {
+export function renderHome(samples: BatchRef[], origin: string, error = '', products: PublicProduct[] = []): string {
   const body =
     '<main class="wrap"><div class="home">' +
     '<div class="hero"><img src="/f/tule-box.webp" alt="Hộp Tú Lệ Smart Breakfast" fetchpriority="high" decoding="async"></div>' +
@@ -31,6 +49,7 @@ export function renderHome(samples: BatchRef[], origin: string, error = ''): str
     '<div class="cover"><img src="/f/tule-products.webp" alt="Sản phẩm Tú Lệ Smart Breakfast" loading="lazy" decoding="async"></div>' +
     '<h1 class="title" style="font-size:24px;margin:0">Tra cứu một lô sản phẩm</h1>' +
     '<p style="color:#5A6560;margin:8px 0 0">Quét mã QR trên bao bì, hoặc nhập mã lô.</p>' +
+    productMenu(products) +
     sampleList(samples) +
     '</div></div></main>';
 

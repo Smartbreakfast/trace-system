@@ -109,9 +109,10 @@ app.get('/', async (c) => {
     if (code) return c.redirect(`/t/${encodeURIComponent(code)}`, 302);
   }
   const samples = await trace.publicBatches(c.env.DB);
+  const products = await trace.publicCatalog(c.env.DB);
   const origin = new URL(c.req.url).origin;
   return htmlResponse(
-    renderHome(samples, origin, asked !== undefined ? 'Nhập mã in trên bao bì, ví dụ TL-2026-001.' : ''),
+    renderHome(samples, origin, asked !== undefined ? 'Nhập mã in trên bao bì, ví dụ TL-2026-001.' : '', products),
   );
 });
 
@@ -129,7 +130,8 @@ app.get('/t/:code', async (c) => {
     return htmlResponse(renderNotFound(code, samples, origin), 404);
   }
   const tab = tabFromSlug(c.req.query('tab'));
-  return htmlResponse(renderTrace(record, tab, origin));
+  const products = await trace.publicCatalog(c.env.DB);
+  return htmlResponse(renderTrace(record, tab, origin, products));
 });
 
 // ------------------------------------------------------------------- public
@@ -147,6 +149,10 @@ app.get('/api/health', (c) =>
 
 app.get('/api/public/batches', async (c) =>
   c.json(await trace.publicBatches(c.env.DB)),
+);
+
+app.get('/api/public/catalog', async (c) =>
+  c.json(await trace.publicCatalog(c.env.DB)),
 );
 
 app.get('/api/public/featured', async (c) => c.json(await trace.featured(c.env.DB)));
@@ -172,11 +178,34 @@ app.get('/api/admin/session', (c) => c.json({ ok: true, role: 'admin' }));
 
 app.get('/api/admin/summary', async (c) => c.json(await trace.summary(c.env.DB)));
 
+app.get('/api/admin/products', async (c) =>
+  c.json(await trace.listProducts(c.env.DB)),
+);
+
+app.post('/api/admin/products', async (c) => {
+  const body = await jsonBody(c.req.raw);
+  return c.json(
+    await trace.createCatalogProduct(c.env.DB, {
+      sku: str(body, 'sku', 'mã sản phẩm', { max: 80 }),
+      name: str(body, 'name', 'tên sản phẩm', { min: 2, max: 160 }),
+      description: str(body, 'description', 'mô tả', { optional: true }),
+      templateKey: oneOf(
+        str(body, 'templateKey', 'template', { optional: true, max: 80 }),
+        ['', 'tule-breakfast', 'buffalo-dried'] as const,
+        'template',
+        '',
+      ),
+    }),
+    201,
+  );
+});
+
 app.get('/api/admin/product-batches', async (c) => {
   const query = c.req.query();
   return c.json(
     await trace.listBatches(c.env.DB, {
       q: query.q,
+      productSku: query.productSku,
       sort: query.sort,
       page: query.page ? Number(query.page) : undefined,
       limit: query.limit ? Number(query.limit) : undefined,
@@ -191,6 +220,7 @@ app.get('/api/admin/product-batches/:code/snapshots', async (c) =>
 app.post('/api/admin/product-batches', async (c) => {
   const body = await jsonBody(c.req.raw);
   const created = await trace.createProduct(c.env.DB, {
+    productId: int(body, 'productId', 'sản phẩm'),
     name: str(body, 'name', 'tên sản phẩm', { min: 2, max: 160 }),
     code: str(body, 'code', 'mã lô', { min: 4, max: 64 }),
     productionDate: str(body, 'productionDate', 'ngày sản xuất', { max: 40 }),
@@ -297,6 +327,7 @@ app.post('/api/admin/ingredient-batches', async (c) => {
       max: 40,
     }),
     summary: str(body, 'summary', 'mô tả', { optional: true }),
+    sourceProductBatchId: optionalInt(body, 'sourceProductBatchId', 'batch nguyên liệu nguồn'),
     latitude: coord(body, 'latitude', 'vĩ độ vùng nguyên liệu', 90),
     longitude: coord(body, 'longitude', 'kinh độ vùng nguyên liệu', 180),
     areaGeoJson: normalizeArea(body.areaGeoJson),
@@ -319,6 +350,7 @@ app.patch('/api/admin/ingredient-batches/:id', async (c) => {
       latitude: coord(body, 'latitude', 'vĩ độ vùng nguyên liệu', 90),
       longitude: coord(body, 'longitude', 'kinh độ vùng nguyên liệu', 180),
       areaGeoJson: normalizeArea(body.areaGeoJson),
+      sourceProductBatchId: optionalInt(body, 'sourceProductBatchId', 'batch nguyên liệu nguồn'),
     },
   );
   return c.json(updated);
