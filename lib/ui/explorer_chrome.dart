@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -19,7 +20,7 @@ const _landingUrl = String.fromEnvironment(
 /// biết mình đang ở hai hệ thống khác nhau.
 ///
 /// `path` rỗng là mục của chính trang này: không phải liên kết, chỉ tô đậm.
-const _menu = <({String label, String path})>[
+const _siteMenu = <({String label, String path})>[
   (label: 'Trang chủ', path: '/'),
   (label: 'Sản phẩm', path: '/san-pham'),
   (label: 'Quy trình', path: '/quy-trinh'),
@@ -28,6 +29,14 @@ const _menu = <({String label, String path})>[
   (label: 'Thành tựu', path: '/thanh-tuu'),
   (label: 'Liên hệ', path: '/lien-he'),
 ];
+
+/// Bản chạy trong trình duyệt nằm ngay cạnh trang giới thiệu nên giữ đủ bảy
+/// mục. Bản cài từ cửa hàng chỉ làm mỗi việc tra cứu: để lại sáu mục mở trình
+/// duyệt ra trang khác là mời người dùng rời khỏi app, nên chỉ giữ mục Truy
+/// xuất với danh sách lô.
+final _menu = kIsWeb
+    ? _siteMenu
+    : _siteMenu.where((item) => item.path.isEmpty).toList();
 
 /// Thanh điều hướng, dựng theo `.site-header` của trang giới thiệu: cao 68px,
 /// nền trắng, viền đáy một nét, mục chữ 15px và nút đặt hàng dạng viên thuốc.
@@ -171,14 +180,14 @@ class _ExplorerHeaderState extends State<ExplorerHeader> {
           // Danh sách mục trên màn hẹp, mở ra ngay dưới thanh trên.
           if (!full && menuOpen)
             centred(
-               _MobileMenu(
-                 onPick: () => setState(() => menuOpen = false),
-                 products: widget.products,
-                 selectedSku: widget.selectedSku,
-                 currentCode: widget.currentCode,
-                 onProductChanged: widget.onProductChanged,
-                 onOpenCode: widget.onOpenCode,
-               ),
+              _MobileMenu(
+                onPick: () => setState(() => menuOpen = false),
+                products: widget.products,
+                selectedSku: widget.selectedSku,
+                currentCode: widget.currentCode,
+                onProductChanged: widget.onProductChanged,
+                onOpenCode: widget.onOpenCode,
+              ),
               padding: const EdgeInsets.only(bottom: 10),
             ),
         ],
@@ -241,28 +250,35 @@ class _MobileMenu extends StatelessWidget {
   final ValueChanged<String>? onProductChanged;
   final ValueChanged<String>? onOpenCode;
 
+  // Material trong suốt bọc ngoài: ExpansionTile của mục truy xuất vẽ nền và
+  // vệt chạm lên Material gần nhất, mà thanh trên lại là một Container có nền
+  // trắng, nên thiếu lớp này Flutter báo lỗi "ListTile background color or ink
+  // splashes may be invisible" ngay lúc mở menu.
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      for (final item in _menu)
-        item.path.isEmpty
-            ? _MobileTraceMenu(
-                products: products,
-                selectedSku: selectedSku,
-                currentCode: currentCode,
-                onProductChanged: onProductChanged,
-                onOpenCode: onOpenCode,
-                onPick: onPick,
-              )
-            : _MobileMenuRow(
-                label: item.label,
-                url: '$_landingUrl${item.path}',
-                current: false,
-                onPick: onPick,
-              ),
-    ],
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final item in _menu)
+          item.path.isEmpty
+              ? _MobileTraceMenu(
+                  products: products,
+                  selectedSku: selectedSku,
+                  currentCode: currentCode,
+                  onProductChanged: onProductChanged,
+                  onOpenCode: onOpenCode,
+                  onPick: onPick,
+                )
+              : _MobileMenuRow(
+                  label: item.label,
+                  url: '$_landingUrl${item.path}',
+                  current: false,
+                  onPick: onPick,
+                ),
+      ],
+    ),
   );
 }
 
@@ -333,7 +349,10 @@ class _TraceMenuLink extends StatelessWidget {
             height: 34,
             child: Text(
               product.name,
-              style: const TextStyle(fontWeight: FontWeight.w800, color: componentInk),
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: componentInk,
+              ),
             ),
           ),
           for (final batch in product.batches)
@@ -364,9 +383,20 @@ class _TraceMenuLink extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Truy xuất nguồn gốc', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: landingInk)),
+            Text(
+              'Truy xuất nguồn gốc',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: landingInk,
+              ),
+            ),
             SizedBox(width: 3),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: landingInk2),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: landingInk2,
+            ),
           ],
         ),
       ),
@@ -396,14 +426,21 @@ class _MobileTraceMenu extends StatelessWidget {
     tilePadding: EdgeInsets.zero,
     title: const Text(
       'Truy xuất nguồn gốc',
-      style: TextStyle(fontSize: 18, color: landingTealInk, fontWeight: FontWeight.w700),
+      style: TextStyle(
+        fontSize: 18,
+        color: landingTealInk,
+        fontWeight: FontWeight.w700,
+      ),
     ),
     initiallyExpanded: true,
     children: [
       for (final product in products)
         ExpansionTile(
           tilePadding: const EdgeInsets.only(left: 12),
-          title: Text(product.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          title: Text(
+            product.name,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
           initiallyExpanded: product.sku == selectedSku,
           children: [
             for (final batch in product.batches)
@@ -411,7 +448,9 @@ class _MobileTraceMenu extends StatelessWidget {
                 dense: true,
                 contentPadding: const EdgeInsets.only(left: 28, right: 8),
                 title: Text(batch.code),
-                subtitle: batch.productionDate.isEmpty ? null : Text('SX ${batch.productionDate}'),
+                subtitle: batch.productionDate.isEmpty
+                    ? null
+                    : Text('SX ${batch.productionDate}'),
                 trailing: batch.code == currentCode?.toUpperCase()
                     ? const Icon(Icons.radio_button_checked, color: landingTeal)
                     : const Icon(Icons.chevron_right, color: brandMuted),

@@ -141,26 +141,25 @@ Response _json(Object? body, {int status = 200}) => Response.bytes(
   headers: const {'content-type': 'application/json; charset=utf-8'},
 );
 
-Widget _app(TraceApi api, {String location = '/t/TL-2026-001'}) =>
-    TuleTraceApp(
-      router: GoRouter(
-        initialLocation: location,
-        routes: [
-          GoRoute(
-            path: '/',
-            builder: (_, _) => ExplorerPage(api: api),
-          ),
-          GoRoute(
-            path: '/t/:code',
-            builder: (context, state) => ExplorerPage(
-              code: state.pathParameters['code'],
-              demo: state.uri.queryParameters['demo'] == '1',
-              api: api,
-            ),
-          ),
-        ],
+Widget _app(TraceApi api, {String location = '/t/TL-2026-001'}) => TuleTraceApp(
+  router: GoRouter(
+    initialLocation: location,
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => ExplorerPage(api: api),
       ),
-    );
+      GoRoute(
+        path: '/t/:code',
+        builder: (context, state) => ExplorerPage(
+          code: state.pathParameters['code'],
+          demo: state.uri.queryParameters['demo'] == '1',
+          api: api,
+        ),
+      ),
+    ],
+  ),
+);
 
 /// Skeleton lúc tải có animation lặp vô hạn nên `pumpAndSettle` sẽ quay
 /// hết 8 giây thời gian giả và làm request tự timeout. Bơm vài khung là đủ.
@@ -259,8 +258,14 @@ Widget _adminApp(TraceApi api) => TuleTraceApp(
   router: GoRouter(
     initialLocation: '/admin',
     routes: [
-      GoRoute(path: '/admin', builder: (_, _) => ManagementPage(api: api)),
-      GoRoute(path: '/', builder: (_, _) => ExplorerPage(api: api)),
+      GoRoute(
+        path: '/admin',
+        builder: (_, _) => ManagementPage(api: api),
+      ),
+      GoRoute(
+        path: '/',
+        builder: (_, _) => ExplorerPage(api: api),
+      ),
     ],
   ),
 );
@@ -331,7 +336,9 @@ void main() {
     // báo rằng chỗ này sẽ có gì.
     expect(
       find.byWidgetPredicate(
-        (w) => w is Image && w.image is AssetImage &&
+        (w) =>
+            w is Image &&
+            w.image is AssetImage &&
             (w.image as AssetImage).assetName == 'assets/tule-box.jpg',
       ),
       findsOneWidget,
@@ -389,14 +396,13 @@ void main() {
   testWidgets('API lỗi thì báo lỗi, tuyệt đối không lặng lẽ hiện dữ liệu mẫu', (
     tester,
   ) async {
-    final api = _api(MockClient((_) async => _json({'message': 'boom'}, status: 500)));
+    final api = _api(
+      MockClient((_) async => _json({'message': 'boom'}, status: 500)),
+    );
     await tester.pumpWidget(_app(api));
     await _settle(tester);
 
-    expect(
-      find.text('Không kết nối được máy chủ truy xuất'),
-      findsOneWidget,
-    );
+    expect(find.text('Không kết nối được máy chủ truy xuất'), findsOneWidget);
     expect(find.text('Cốm Tú Lệ'), findsNothing);
   });
 
@@ -448,6 +454,28 @@ void main() {
     expect(paths, isNot(contains('/admin')));
   });
 
+  // Menu của bản web dẫn sang sáu trang của trang giới thiệu. Bản cài từ cửa
+  // hàng không có mấy trang đó, bấm vào là nhảy ra trình duyệt, nên chỉ còn
+  // mục Truy xuất với danh sách lô.
+  testWidgets('bản di động: menu chỉ còn mục truy xuất', (tester) async {
+    await tester.pumpWidget(_app(_api(_healthyClient())));
+    await _settle(tester);
+
+    await tester.tap(find.text('Menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Truy xuất nguồn gốc'), findsOneWidget);
+    for (final label in const [
+      'Trang chủ',
+      'Quy trình',
+      'Công nghệ',
+      'Thành tựu',
+      'Liên hệ',
+    ]) {
+      expect(find.text(label), findsNothing, reason: label);
+    }
+  });
+
   testWidgets('chế độ demo luôn kèm cảnh báo dữ liệu không thật', (
     tester,
   ) async {
@@ -462,11 +490,7 @@ void main() {
   // Bản cũ dựng BatchSummary bằng Row cứng với ảnh 175px và ô tìm kiếm
   // SizedBox(width: 450), nên vỡ trên màn hình điện thoại. Quét lại ba khổ
   // màn hình để chặn hồi quy.
-  for (final size in const [
-    Size(360, 800),
-    Size(768, 1024),
-    Size(1440, 900),
-  ]) {
+  for (final size in const [Size(360, 800), Size(768, 1024), Size(1440, 900)]) {
     testWidgets('không tràn layout ở ${size.width.toInt()}px', (tester) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -476,7 +500,10 @@ void main() {
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
-      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -600));
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -600),
+      );
       await tester.pump();
       expect(tester.takeException(), isNull);
     });
@@ -490,7 +517,8 @@ void main() {
 
     final api = _api(
       MockClient(
-        (_) async => _json({'message': 'Token quản trị không đúng.'}, status: 401),
+        (_) async =>
+            _json({'message': 'Token quản trị không đúng.'}, status: 401),
       ),
     );
     await tester.pumpWidget(_adminApp(api));
@@ -520,7 +548,9 @@ void main() {
     // của dòng thì so đúng từng chữ.
     expect(find.textContaining('TL-2026-001  ·  tạo '), findsOneWidget);
     expect(
-      find.textContaining('SX 12.08.2026  ·  4 nguyên liệu  ·  12 công đoạn  ·  v1'),
+      find.textContaining(
+        'SX 12.08.2026  ·  4 nguyên liệu  ·  12 công đoạn  ·  v1',
+      ),
       findsOneWidget,
     );
 
@@ -572,7 +602,8 @@ void main() {
       if (path.endsWith('/admin/summary')) return _json({'products': 30});
       if (path.endsWith('/admin/product-batches')) {
         calls.add(request.url);
-        final page = int.tryParse(request.url.queryParameters['page'] ?? '1') ?? 1;
+        final page =
+            int.tryParse(request.url.queryParameters['page'] ?? '1') ?? 1;
         final term = request.url.queryParameters['q'] ?? '';
         if (term.isNotEmpty) {
           return _json({
@@ -620,7 +651,10 @@ void main() {
     expect(find.text('Lô trang 2'), findsOneWidget);
     expect(calls.last.queryParameters['page'], '2');
 
-    await tester.enterText(find.widgetWithText(TextField, 'Tìm mã lô hoặc tên'), 'tìm');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Tìm mã lô hoặc tên'),
+      'tìm',
+    );
     await tester.pump(const Duration(milliseconds: 500));
     await _settle(tester);
     expect(calls.last.queryParameters['q'], 'tìm');
@@ -799,9 +833,7 @@ void main() {
       },
     ];
 
-    await tester.pumpWidget(
-      _app(_api(MockClient((_) async => _json(sparse)))),
-    );
+    await tester.pumpWidget(_app(_api(MockClient((_) async => _json(sparse)))));
     await _settle(tester);
     await _openOrigin(tester);
     await tester.tap(find.text('Cốm Tú Lệ').first);
@@ -882,7 +914,10 @@ void main() {
       codeFromScan('https://tule-trace.sontm.workers.dev/t/TL-2026-001'),
       'TL-2026-001',
     );
-    expect(codeFromScan('http://127.0.0.1:8787/t/tl-2026-002?x=1'), 'TL-2026-002');
+    expect(
+      codeFromScan('http://127.0.0.1:8787/t/tl-2026-002?x=1'),
+      'TL-2026-002',
+    );
     expect(codeFromScan('  tl-2026-003 '), 'TL-2026-003');
     expect(codeFromScan(''), '');
   });
@@ -1071,10 +1106,7 @@ void main() {
     await tester.tap(find.text('Kiểm định chất lượng'));
     await _settle(tester);
 
-    expect(
-      find.textContaining('Chưa có giấy chứng nhận'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Chưa có giấy chứng nhận'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1260,9 +1292,7 @@ void main() {
   });
 
   test('timeline sắp theo ngày dù API trả lộn xộn', () {
-    final record = TraceRecord.fromApi(
-      Map<String, dynamic>.from(_traceJson),
-    );
+    final record = TraceRecord.fromApi(Map<String, dynamic>.from(_traceJson));
     final titles = [for (final entry in record.timeline) entry.event.title];
     expect(titles, [
       'Thu hoạch lúa nếp nương',
@@ -1272,9 +1302,7 @@ void main() {
   });
 
   test('đọc được trạng thái toàn vẹn từ API', () {
-    final record = TraceRecord.fromApi(
-      Map<String, dynamic>.from(_traceJson),
-    );
+    final record = TraceRecord.fromApi(Map<String, dynamic>.from(_traceJson));
     expect(record.integrity.status, IntegrityStatus.verified);
     expect(record.integrity.version, 1);
     expect(record.ingredients.first.supplier, 'Hợp tác xã Tú Lệ');
