@@ -51,6 +51,11 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Ứng dụng dùng camera để quét mã QR in trên bao bì và mở hồ sơ truy xuất của lô hàng đó. Hình ảnh không được lưu lại và không gửi đi đâu.</string>
+	<!-- App chỉ gọi HTTPS, không tự cài thuật toán mã hoá nào, nên thuộc diện
+	     miễn khai báo xuất khẩu. Khai sẵn ở đây để App Store Connect khỏi hỏi
+	     lại câu đó ở mỗi bản tải lên. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

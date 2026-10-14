@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Mở app khi người dùng bấm vào đường dẫn hồ sơ lô. Phía máy chủ là
+	     web/.well-known/apple-app-site-association, phải điền Team ID thật
+	     trong đó thì iOS mới chịu xác minh. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:trace.smartbreakfast.store</string>
+	</array>
+</dict>
+</plist>
