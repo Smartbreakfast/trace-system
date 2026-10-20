@@ -1,4 +1,4 @@
-import { sha256Of } from './canonical';
+import { sha256Hex, sha256Of } from './canonical';
 import { anchorBatch, chainConfig } from './chain';
 import type { Env } from './env';
 import { ApiError } from './errors';
@@ -304,10 +304,13 @@ export async function publicTrace(db: D1Database, code: string, env?: Env) {
         (event) => ({ ...event, media: snapshotMediaToPublic(event.media) }),
       ),
       integrity: await publicVerify(db, code, env),
+      ratings: await ratingSummary(db, productId),
     };
   }
 
-  return adminTrace(db, code, env);
+  // Lô chưa công bố lần nào: không có snapshot để đọc, trả dữ liệu đang có.
+  const live = (await adminTrace(db, code, env)) as Row;
+  return { ...live, ratings: await ratingSummary(db, productId) };
 }
 
 /// Hồ sơ theo dữ liệu đang có trong database, dành cho màn quản trị và cho lô
@@ -1256,4 +1259,144 @@ export async function publish(db: D1Database, code: string, admin = 'admin') {
   ]);
 
   return { code, version, sha256: hash, status: 'PENDING_NETWORK' };
+}
+
+// ---------------------------------------------------------------- đánh giá
+//
+// Đánh giá của người mua nằm ngoài snapshot và ngoài mã băm, lý do ghi ở
+// migration 0012: snapshot là tuyên bố của nhà sản xuất đã neo lên chuỗi, còn
+// đánh giá thì còn thêm mãi. Hai dòng dữ liệu này không được dính vào nhau.
+
+export const ratingSources = ['APP', 'WEB', 'SURVEY', 'DEMO'] as const;
+
+export type RatingSource = (typeof ratingSources)[number];
+
+/** Điểm trung bình, phân bố sao và vài nhận xét mới nhất của một lô. */
+export async function ratingSummary(db: D1Database, productId: number) {
+  const rows = await all(
+    db,
+    'SELECT stars, comment, display_name, created_at FROM batch_ratings WHERE product_batch_id = ? ORDER BY id DESC',
+    productId,
+  );
+
+  const distribution: Record<string, number> = {
+    '1': 0,
+    '2': 0,
+    '3': 0,
+    '4': 0,
+    '5': 0,
+  };
+  let sum = 0;
+  for (const row of rows) {
+    const stars = Number(row.stars);
+    if (stars >= 1 && stars <= 5) {
+      distribution[String(stars)] += 1;
+      sum += stars;
+    }
+  }
+
+  return {
+    count: rows.length,
+    // Một chữ số thập phân: đủ để phân biệt 4,6 với 4,8, mà không gợi ra một
+    // độ chính xác không có thật.
+    average: rows.length === 0 ? 0 : Math.round((sum / rows.length) * 10) / 10,
+    distribution,
+    comments: rows
+      .filter((row) => String(row.comment ?? '').trim() !== '')
+      .slice(0, 8)
+      .map((row) => ({
+        stars: Number(row.stars),
+        comment: String(row.comment),
+        displayName: String(row.display_name ?? ''),
+        createdAt: String(row.created_at),
+      })),
+  };
+}
+
+/**
+ * Ghi một đánh giá. Gửi lại từ cùng thiết bị là sửa đánh giá cũ chứ không cộng
+ * thêm phiếu: không có đăng nhập nên chống gửi trùng chỉ còn chỗ này.
+ */
+export async function saveRating(
+  db: D1Database,
+  code: string,
+  input: {
+    stars: number;
+    comment?: string;
+    displayName?: string;
+    deviceId: string;
+    source?: RatingSource;
+    createdAt?: string;
+  },
+) {
+  const product = await findProduct(db, code);
+  const productId = Number(product.id);
+  // Lưu dấu vân của mã thiết bị, không lưu mã gốc: chỉ cần biết hai lần gửi có
+  // cùng một máy hay không, không cần biết máy nào.
+  const deviceHash = await sha256Hex(new TextEncoder().encode(input.deviceId));
+
+  await db
+    .prepare(
+      `INSERT INTO batch_ratings
+         (product_batch_id, stars, comment, display_name, device_hash, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(product_batch_id, device_hash) DO UPDATE SET
+         stars = excluded.stars,
+         comment = excluded.comment,
+         display_name = excluded.display_name,
+         created_at = excluded.created_at`,
+    )
+    .bind(
+      productId,
+      input.stars,
+      input.comment ?? '',
+      input.displayName ?? '',
+      deviceHash,
+      input.source ?? 'APP',
+      input.createdAt ?? nowIso(),
+    )
+    .run();
+
+  return ratingSummary(db, productId);
+}
+
+/** Thống kê đánh giá theo lô và theo nguồn, cho màn quản trị và cho báo cáo. */
+export async function ratingReport(db: D1Database) {
+  const byBatch = await all(
+    db,
+    `SELECT b.code, b.name,
+            COUNT(r.id) AS count,
+            ROUND(AVG(r.stars), 2) AS average
+       FROM product_batches b
+       JOIN batch_ratings r ON r.product_batch_id = b.id
+      GROUP BY b.id
+      ORDER BY b.code`,
+  );
+  const bySource = await all(
+    db,
+    `SELECT source, COUNT(*) AS count, ROUND(AVG(stars), 2) AS average
+       FROM batch_ratings GROUP BY source ORDER BY source`,
+  );
+  const overall = await first(
+    db,
+    'SELECT COUNT(*) AS count, ROUND(AVG(stars), 2) AS average FROM batch_ratings',
+  );
+  return {
+    total: Number(overall?.count ?? 0),
+    average: Number(overall?.average ?? 0),
+    byBatch,
+    bySource,
+  };
+}
+
+/**
+ * Xoá mọi đánh giá của một nguồn. Dùng khi thay dữ liệu dựng sẵn (DEMO) bằng
+ * số liệu thật từ phiếu khảo sát, hoặc khi nhập lại một đợt khảo sát bị sai.
+ */
+export async function deleteRatings(db: D1Database, source: RatingSource) {
+  const result = await db
+    .prepare('DELETE FROM batch_ratings WHERE source = ?')
+    .bind(source)
+    .run();
+  return { source, deleted: Number(result.meta?.changes ?? 0) };
 }

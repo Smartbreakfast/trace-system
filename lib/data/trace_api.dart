@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../models/trace_models.dart'
-    show BatchPage, BatchRef, ProductCatalog, PublicProduct;
+    show BatchPage, BatchRef, ProductCatalog, PublicProduct, RatingSummary;
 
 /// Lỗi có ngữ cảnh để UI hiển thị đúng trạng thái thay vì một `Exception` chung.
 sealed class TraceApiFailure implements Exception {
@@ -165,6 +165,33 @@ class TraceApi {
       for (final item in list)
         if (item is Map<String, dynamic>) BatchRef.fromApi(item),
     ];
+  }
+
+  /// Gửi đánh giá của người mua cho một lô, trả về bản tóm tắt đã cập nhật.
+  ///
+  /// `deviceId` là mã ẩn danh sinh trên máy (xem [DeviceId]). Gửi lại từ cùng
+  /// một máy là sửa đánh giá cũ chứ không cộng thêm phiếu.
+  Future<RatingSummary> submitRating({
+    required String code,
+    required int stars,
+    required String deviceId,
+    String comment = '',
+    String displayName = '',
+  }) async {
+    final data = await _send(
+      () => _client.post(
+        _uri('/public/traces/$code/ratings'),
+        headers: _headers(json: true),
+        body: jsonEncode({
+          'stars': stars,
+          'deviceId': deviceId,
+          if (comment.trim().isNotEmpty) 'comment': comment.trim(),
+          if (displayName.trim().isNotEmpty) 'displayName': displayName.trim(),
+          'source': kIsWeb ? 'WEB' : 'APP',
+        }),
+      ),
+    );
+    return RatingSummary.fromApi(data is Map<String, dynamic> ? data : null);
   }
 
   Future<Map<String, dynamic>> verify(String code) async {

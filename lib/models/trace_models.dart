@@ -525,6 +525,93 @@ class PublicProduct {
   );
 }
 
+/// Một đánh giá của người mua sau khi quét mã.
+///
+/// Không nằm trong snapshot và không vào mã băm: hồ sơ lô là tuyên bố của nhà
+/// sản xuất đã neo lên blockchain, còn đánh giá thì người mua còn gửi thêm mãi.
+class RatingComment {
+  const RatingComment({
+    required this.stars,
+    required this.comment,
+    this.displayName = '',
+    this.createdAt = '',
+  });
+
+  final int stars;
+  final String comment;
+  final String displayName;
+  final String createdAt;
+
+  String get authorLabel =>
+      displayName.trim().isEmpty ? 'Khách ẩn danh' : displayName.trim();
+
+  /// Chỉ ngày, không giờ: giờ gửi không giúp người đọc quyết định gì.
+  String get dateText {
+    final parsed = DateTime.tryParse(createdAt);
+    if (parsed == null) return '';
+    final local = parsed.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(local.day)}.${two(local.month)}.${local.year}';
+  }
+
+  factory RatingComment.fromApi(Map<String, dynamic> json) => RatingComment(
+    stars: (json['stars'] as num?)?.toInt() ?? 0,
+    comment: json['comment'] as String? ?? '',
+    displayName: json['displayName'] as String? ?? '',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
+}
+
+/// Điểm trung bình, phân bố sao và vài nhận xét mới nhất của một lô.
+class RatingSummary {
+  const RatingSummary({
+    this.count = 0,
+    this.average = 0,
+    this.distribution = const {},
+    this.comments = const [],
+  });
+
+  const RatingSummary.empty()
+    : count = 0,
+      average = 0,
+      distribution = const {},
+      comments = const [];
+
+  final int count;
+  final double average;
+  final Map<int, int> distribution;
+  final List<RatingComment> comments;
+
+  bool get isEmpty => count == 0;
+
+  int starCount(int stars) => distribution[stars] ?? 0;
+
+  /// Một chữ số thập phân, dấu phẩy theo cách viết tiếng Việt.
+  String get averageText => average.toStringAsFixed(1).replaceAll('.', ',');
+
+  factory RatingSummary.fromApi(Map<String, dynamic>? json) {
+    if (json == null) return const RatingSummary.empty();
+    final raw = json['distribution'];
+    final distribution = <int, int>{};
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final stars = int.tryParse('${entry.key}');
+        final value = (entry.value as num?)?.toInt();
+        if (stars != null && value != null) distribution[stars] = value;
+      }
+    }
+    return RatingSummary(
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      average: (json['average'] as num?)?.toDouble() ?? 0,
+      distribution: distribution,
+      comments: [
+        for (final item in json['comments'] as List<dynamic>? ?? const [])
+          if (item is Map<String, dynamic>) RatingComment.fromApi(item),
+      ],
+    );
+  }
+}
+
 class TraceRecord {
   const TraceRecord({
     required this.batch,
@@ -532,6 +619,7 @@ class TraceRecord {
     required this.integrity,
     this.batchEvents = const [],
     this.media = const [],
+    this.ratings = const RatingSummary.empty(),
     this.isDemo = false,
   });
 
@@ -545,6 +633,9 @@ class TraceRecord {
 
   /// Media gắn thẳng vào lô thành phẩm: ảnh bìa, ảnh giới thiệu và hồ sơ kiểm nghiệm.
   final List<MediaAsset> media;
+
+  /// Đánh giá của người mua. Rỗng khi lô chưa ai đánh giá.
+  final RatingSummary ratings;
 
   MediaAsset? get cover => media.where((item) => item.isCover).firstOrNull;
 
@@ -623,6 +714,7 @@ class TraceRecord {
           if (raw is Map<String, dynamic>) ProcessEvent.fromApi(raw),
       ],
       media: _mediaOf(json),
+      ratings: RatingSummary.fromApi(json['ratings'] as Map<String, dynamic>?),
     );
   }
 }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 
-import { ApiError } from './errors';
+import { ApiError, badRequest } from './errors';
 import {
   allowedContentTypes,
   certTypes,
@@ -165,6 +165,38 @@ app.get('/api/public/traces/:code/verify', async (c) =>
   c.json(await trace.publicVerify(c.env.DB, c.req.param('code'), c.env)),
 );
 
+/**
+ * Đánh giá của người mua. Endpoint công khai duy nhất có quyền ghi, nên chặn
+ * ngay tại đây: số sao phải 1-5, nhận xét có giới hạn độ dài, và nguồn chỉ
+ * nhận APP hoặc WEB. SURVEY và DEMO là việc của màn quản trị, người ngoài
+ * không tự gắn nhãn cho phiếu của mình được.
+ */
+app.post('/api/public/traces/:code/ratings', async (c) => {
+  const body = await jsonBody(c.req.raw);
+  const stars = int(body, 'stars', 'số sao');
+  if (stars > 5) throw badRequest('Số sao phải từ 1 đến 5.');
+  const summary = await trace.saveRating(
+    c.env.DB,
+    normalizeCode(c.req.param('code')),
+    {
+      stars,
+      comment: str(body, 'comment', 'nhận xét', { optional: true, max: 400 }),
+      displayName: str(body, 'displayName', 'tên người gửi', {
+        optional: true,
+        max: 60,
+      }),
+      deviceId: str(body, 'deviceId', 'mã thiết bị', { min: 8, max: 120 }),
+      source: oneOf(
+        body.source,
+        ['APP', 'WEB'] as const,
+        'nguồn đánh giá',
+        'APP',
+      ),
+    },
+  );
+  return c.json(summary, 201);
+});
+
 app.get('/api/media/*', (c) => {
   const key = decodeURIComponent(
     new URL(c.req.url).pathname.replace('/api/media/', ''),
@@ -177,6 +209,42 @@ app.get('/api/media/*', (c) => {
 app.get('/api/admin/session', (c) => c.json({ ok: true, role: 'admin' }));
 
 app.get('/api/admin/summary', async (c) => c.json(await trace.summary(c.env.DB)));
+
+/// Tổng hợp đánh giá theo lô và theo nguồn, để biết bao nhiêu phiếu là thật.
+app.get('/api/admin/ratings', async (c) =>
+  c.json(await trace.ratingReport(c.env.DB)),
+);
+
+/// Nhập một đánh giá từ phiếu khảo sát giấy, hoặc gieo dữ liệu dựng sẵn.
+app.post('/api/admin/ratings', async (c) => {
+  const body = await jsonBody(c.req.raw);
+  const stars = int(body, 'stars', 'số sao');
+  if (stars > 5) throw badRequest('Số sao phải từ 1 đến 5.');
+  return c.json(
+    await trace.saveRating(c.env.DB, normalizeCode(str(body, 'code', 'mã lô')), {
+      stars,
+      comment: str(body, 'comment', 'nhận xét', { optional: true, max: 400 }),
+      displayName: str(body, 'displayName', 'tên người gửi', {
+        optional: true,
+        max: 60,
+      }),
+      deviceId: str(body, 'deviceId', 'mã phiếu', { min: 8, max: 120 }),
+      source: oneOf(body.source, trace.ratingSources, 'nguồn đánh giá', 'SURVEY'),
+      createdAt: str(body, 'createdAt', 'thời điểm', { optional: true, max: 40 }) || undefined,
+    }),
+    201,
+  );
+});
+
+/// Xoá cả một nguồn, dùng khi thay dữ liệu dựng sẵn bằng số liệu thật.
+app.delete('/api/admin/ratings/:source', async (c) =>
+  c.json(
+    await trace.deleteRatings(
+      c.env.DB,
+      oneOf(c.req.param('source'), trace.ratingSources, 'nguồn đánh giá'),
+    ),
+  ),
+);
 
 app.get('/api/admin/products', async (c) =>
   c.json(await trace.listProducts(c.env.DB)),

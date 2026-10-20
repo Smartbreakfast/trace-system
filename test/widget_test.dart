@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:com_tule/data/geo_lookup.dart';
 import 'package:com_tule/data/qr_scanner.dart';
+import 'package:com_tule/data/device_id.dart';
 import 'package:com_tule/data/trace_api.dart';
 import 'package:com_tule/main.dart';
 import 'package:com_tule/models/trace_models.dart';
@@ -13,6 +14,7 @@ import 'package:com_tule/ui/explorer_chrome.dart';
 import 'package:com_tule/ui/trace_components.dart';
 import 'package:com_tule/ui/explorer_tabs.dart';
 import 'package:com_tule/ui/process_tree.dart';
+import 'package:com_tule/ui/rating_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -102,6 +104,19 @@ const _traceJson = {
       'caption': 'Phiếu kiểm nghiệm Quatest 1',
     },
   ],
+  'ratings': {
+    'count': 2,
+    'average': 4.5,
+    'distribution': {'1': 0, '2': 0, '3': 0, '4': 1, '5': 1},
+    'comments': [
+      {
+        'stars': 5,
+        'comment': 'Quét mã ra đúng lô ghi trên hộp.',
+        'displayName': 'Nguyễn T. H.',
+        'createdAt': '2026-10-10T02:00:00.000Z',
+      },
+    ],
+  },
   'integrity': {
     'status': 'VERIFIED',
     'version': 1,
@@ -485,6 +500,75 @@ void main() {
     await _settle(tester);
 
     expect(find.textContaining('không phải bản ghi thật'), findsOneWidget);
+  });
+
+  testWidgets('hồ sơ hiện điểm đánh giá của người mua', (tester) async {
+    await tester.pumpWidget(_app(_api(_healthyClient())));
+    await _settle(tester);
+
+    expect(find.text('4,5'), findsOneWidget);
+    expect(find.text('2 đánh giá'), findsOneWidget);
+    expect(find.text('Quét mã ra đúng lô ghi trên hộp.'), findsOneWidget);
+    expect(find.text('Nguyễn T. H.'), findsOneWidget);
+    // Phải nói rõ đánh giá không nằm trong bản đã neo lên chuỗi, nếu không
+    // người đọc tưởng ngôi sao cũng được blockchain bảo đảm.
+    expect(find.textContaining('không nằm trong bản công bố'), findsOneWidget);
+  });
+
+  testWidgets('gửi đánh giá: chọn sao, gửi, nhận lời cảm ơn', (tester) async {
+    Map<String, dynamic>? sent;
+    DeviceId.overrideForTest('test-device-0001');
+    addTearDown(() => DeviceId.overrideForTest(null));
+
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/ratings')) {
+        sent = jsonDecode(request.body) as Map<String, dynamic>;
+        return _json({
+          'count': 3,
+          'average': 4.7,
+          'distribution': {'1': 0, '2': 0, '3': 0, '4': 1, '5': 2},
+          'comments': const [],
+        }, status: 201);
+      }
+      return _healthyClient().send(request).then(Response.fromStream);
+    });
+
+    await tester.pumpWidget(_app(_api(client)));
+    await _settle(tester);
+
+    final star = find.descendant(
+      of: find.byType(RatingSection),
+      matching: find.byTooltip('5 sao'),
+    );
+    await tester.ensureVisible(star);
+    await tester.pump();
+    await tester.tap(star);
+    await tester.pump();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nhận xét (không bắt buộc)'),
+      'Bột thơm, pha không bị vón.',
+    );
+    final send = find.text('Gửi đánh giá');
+    await tester.ensureVisible(send);
+    await tester.pump();
+    await tester.tap(send);
+    await _settle(tester);
+
+    expect(sent?['stars'], 5);
+    expect(sent?['comment'], 'Bột thơm, pha không bị vón.');
+    // Mã thiết bị phải đi kèm, nếu không server không chặn được gửi trùng.
+    expect(sent?['deviceId'], 'test-device-0001');
+    expect(find.textContaining('Đã nhận đánh giá'), findsOneWidget);
+  });
+
+  testWidgets('hồ sơ mẫu không nhận đánh giá', (tester) async {
+    await tester.pumpWidget(
+      _app(_api(_healthyClient()), location: '/t/TL-2026-001?demo=1'),
+    );
+    await _settle(tester);
+
+    expect(find.byType(RatingSection), findsNothing);
   });
 
   // Bản cũ dựng BatchSummary bằng Row cứng với ảnh 175px và ô tìm kiếm
@@ -1320,5 +1404,27 @@ void main() {
     expect(record.batch.description, '');
     expect(record.ingredients.single.origin, 'Chưa có vùng nguyên liệu');
     expect(record.integrity.status, IntegrityStatus.unknown);
+    // Lô cũ, server chưa trả khối đánh giá: về rỗng chứ không null.
+    expect(record.ratings.isEmpty, isTrue);
+    expect(record.ratings.averageText, '0,0');
+  });
+
+  test('đánh giá: phân bố sao đọc được cả khoá chuỗi lẫn khoá số', () {
+    final summary = RatingSummary.fromApi({
+      'count': 4,
+      'average': 4.25,
+      // D1 trả khoá chuỗi, bản lưu trên máy có thể trả khoá số.
+      'distribution': {'5': 2, 4: 1, 'rác': 9, '3': null},
+      'comments': [
+        {'stars': 5},
+        'không phải object',
+      ],
+    });
+    expect(summary.averageText, '4,3');
+    expect(summary.starCount(5), 2);
+    expect(summary.starCount(4), 1);
+    expect(summary.starCount(1), 0);
+    expect(summary.comments.single.stars, 5);
+    expect(summary.comments.single.authorLabel, 'Khách ẩn danh');
   });
 }

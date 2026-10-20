@@ -10,3 +10,10 @@
 # không có đuôi nên Pages mặc định trả octet-stream.
 /.well-known/apple-app-site-association
   Content-Type: application/json
+
+# Font icon đã tree-shake: thêm một icon mới là nội dung file đổi, nhưng tên
+# file thì không. Pages mặc định cho nó sống 4 tiếng trong máy người xem, nên
+# ai đã vào trang trước đó sẽ thấy ô trống ở chỗ icon mới suốt bốn tiếng. Rút
+# xuống 5 phút: file chỉ 18KB, đổi lại icon mới hiện ra gần như ngay.
+/assets/fonts/*
+  Cache-Control: public, max-age=300, must-revalidate

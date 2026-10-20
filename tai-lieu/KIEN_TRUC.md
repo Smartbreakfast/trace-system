@@ -160,6 +160,16 @@ erDiagram
         text published_by
         text published_at
     }
+    batch_ratings {
+        integer id PK
+        integer product_batch_id FK
+        integer stars
+        text comment
+        text display_name
+        text device_hash
+        text source
+        text created_at
+    }
     blockchain_outbox {
         integer id PK
         integer snapshot_id FK
@@ -183,6 +193,8 @@ erDiagram
 | `process_events` | Thứ tự | `position` quyết định thứ tự hiển thị; không suy ra từ `event_date` |
 | `published_snapshots` | UNIQUE | `(product_batch_id, version)` |
 | `media_assets` | Khoá nội dung | `r2_key` có dạng `media/<sha256>.<ext>` |
+| `batch_ratings` | CHECK | `stars` trong khoảng 1..5 |
+| `batch_ratings` | UNIQUE | `(product_batch_id, device_hash)`: một máy một phiếu cho mỗi lô, gửi lại là sửa |
 | Tất cả bảng con | ON DELETE CASCADE | Xoá lô kéo theo nguyên liệu, công đoạn, bản công bố |
 
 ### 4.2 Trạng thái
@@ -192,6 +204,18 @@ erDiagram
 | Lô sản phẩm | `status` | `DRAFT`, `PUBLISHED` |
 | Bản ghi neo chuỗi | `status` | `PENDING_NETWORK`, `CONFIRMED`, `FAILED`, `SKIPPED` |
 | Kiểm chứng | (tính toán) | `VERIFIED`, `MISMATCH`, `NOT_PUBLISHED`, `UNKNOWN` |
+| Đánh giá | `source` | `APP`, `WEB` (người dùng tự gửi), `SURVEY` (nhập từ phiếu khảo sát), `DEMO` (dữ liệu dựng sẵn) |
+
+### 4.3 Đánh giá nằm ngoài vùng băm
+
+`batch_ratings` cố ý không tham gia vào `snapshotPayload`, nên thêm hay sửa một
+đánh giá không làm đổi mã băm của lô. Lý do: bản công bố là tuyên bố của nhà sản
+xuất tại một thời điểm và đã neo lên chuỗi, còn đánh giá là ý kiến người mua gửi
+về sau và còn thêm tiếp; gộp hai dòng dữ liệu đó lại thì mỗi ngôi sao mới sẽ đẩy
+lô sang trạng thái `MISMATCH` và buộc neo lại một giao dịch.
+
+`device_hash` là SHA-256 của mã ẩn danh do máy khách sinh ra; hệ thống không lưu
+mã gốc, chỉ cần biết hai lần gửi có cùng một máy hay không.
 
 ## 5. Cơ chế toàn vẹn dữ liệu
 
@@ -312,6 +336,7 @@ Do khoá đặt theo nội dung, tải lên cùng một tệp nhiều lần ch�
 | GET | `/api/public/featured` | Lô công bố gần nhất |
 | GET | `/api/public/traces/{code}` | Hồ sơ lô theo bản công bố mới nhất |
 | GET | `/api/public/traces/{code}/verify` | Kết quả kiểm chứng công khai |
+| POST | `/api/public/traces/{code}/ratings` | Gửi đánh giá: `stars` 1..5, `deviceId`, tuỳ chọn `comment`, `displayName` |
 | GET | `/api/media/media/{sha256}.{ext}` | Tệp đính kèm |
 
 ### 7.2 Điểm cuối quản trị
@@ -322,6 +347,9 @@ Yêu cầu tiêu đề `Authorization: Bearer <ADMIN_TOKEN>`.
 | --- | --- | --- |
 | GET | `/api/admin/session` | Kiểm tra token |
 | GET | `/api/admin/summary` | Số liệu tổng hợp |
+| GET | `/api/admin/ratings` | Thống kê đánh giá theo lô và theo nguồn |
+| POST | `/api/admin/ratings` | Nhập một đánh giá (phiếu khảo sát, dữ liệu dựng sẵn) |
+| DELETE | `/api/admin/ratings/{source}` | Xoá toàn bộ đánh giá của một nguồn |
 | GET | `/api/admin/product-batches` | Danh sách lô; tham số `q`, `sort`, `page`, `limit` |
 | POST | `/api/admin/product-batches` | Tạo lô |
 | PATCH | `/api/admin/product-batches/{code}` | Cập nhật thông tin lô |

@@ -56,6 +56,20 @@ export interface IntegrityInfo {
   chain?: ChainInfo;
 }
 
+export interface RatingComment {
+  stars: number;
+  comment: string;
+  displayName?: string;
+  createdAt?: string;
+}
+
+export interface RatingInfo {
+  count: number;
+  average: number;
+  distribution?: Record<string, number>;
+  comments?: RatingComment[];
+}
+
 export interface PublicTrace {
   code: string;
   name: string;
@@ -68,6 +82,8 @@ export interface PublicTrace {
   batchEvents?: ProcessEventItem[];
   status?: string;
   integrity?: IntegrityInfo;
+  /// Đánh giá của người mua, nằm ngoài snapshot nên không ảnh hưởng mã băm.
+  ratings?: RatingInfo;
 }
 
 export interface BatchRef {

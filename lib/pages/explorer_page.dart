@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/demo_data.dart';
+import '../data/device_id.dart';
 import '../data/trace_api.dart';
 import '../data/trace_cache.dart';
 import '../models/trace_models.dart';
 import '../ui/async_states.dart';
 import '../ui/explorer_chrome.dart';
 import '../ui/explorer_tabs.dart';
+import '../ui/rating_section.dart';
 import '../ui/shared_components.dart';
 import '../ui/sourcing_section.dart';
 import '../ui/trace_components.dart';
@@ -186,10 +188,17 @@ class _ExplorerPageState extends State<ExplorerPage> {
       final data = await api.verify(current.batch.code);
       if (!mounted) return;
       setState(() {
+        // Chỉ thay kết quả kiểm chứng. Trước đây dựng lại TraceRecord bằng ba
+        // trường nên ảnh, công đoạn của lô và đánh giá rụng hết sau khi bấm
+        // "Kiểm lại".
         record = TraceRecord(
           batch: current.batch,
           ingredients: current.ingredients,
           integrity: IntegrityRecord.fromApi(data),
+          batchEvents: current.batchEvents,
+          media: current.media,
+          ratings: current.ratings,
+          isDemo: current.isDemo,
         );
       });
     } on TraceApiFailure catch (error) {
@@ -199,6 +208,32 @@ class _ExplorerPageState extends State<ExplorerPage> {
       ).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => verifying = false);
+    }
+  }
+
+  /// Gửi đánh giá của người mua. Trả null khi gửi không được: ô nhập giữ
+  /// nguyên nội dung để họ thử lại, kèm một dòng báo lỗi.
+  Future<RatingSummary?> _submitRating({
+    required int stars,
+    required String comment,
+    required String displayName,
+  }) async {
+    final code = record?.batch.code ?? '';
+    if (code.isEmpty) return null;
+    try {
+      return await api.submitRating(
+        code: code,
+        stars: stars,
+        deviceId: await DeviceId.get(),
+        comment: comment,
+        displayName: displayName,
+      );
+    } on TraceApiFailure catch (error) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return null;
     }
   }
 
@@ -385,6 +420,16 @@ class _ExplorerPageState extends State<ExplorerPage> {
         verifying: verifying,
         onVerify: data.isDemo ? null : () => _verify(),
       ),
+      // Hồ sơ mẫu không nhận đánh giá: nó không phải một lô thật nên không có
+      // gì để đánh giá, và phiếu gửi vào đó chỉ làm bẩn số liệu.
+      if (!data.isDemo && data.batch.code.isNotEmpty) ...[
+        const SizedBox(height: 20),
+        RatingSection(
+          summary: data.ratings,
+          wide: wide,
+          onSubmit: _submitRating,
+        ),
+      ],
       ExplorerFooter(wide: wide),
     ],
   );
