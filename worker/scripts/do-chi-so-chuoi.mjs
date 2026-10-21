@@ -34,7 +34,9 @@ console.log('Giá gas        :', formatGwei(gasPrice), 'gwei');
 console.log('Hợp đồng       :', process.env.TRACE_CONTRACT || '(xem wrangler.jsonc)');
 console.log('');
 
-const batches = await (await fetch(`${API}/api/public/batches`)).json();
+// limit=20: mặc định của endpoint là 6 lô cho trang chủ, lấy đúng 6 thì đếm
+// thiếu lô đã neo.
+const batches = await (await fetch(`${API}/api/public/batches?limit=20`)).json();
 const rows = [];
 
 for (const batch of batches) {

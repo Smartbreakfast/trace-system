@@ -10,7 +10,7 @@ Số liệu trong tài liệu chia làm hai loại, luôn ghi rõ loại nào:
 
 | Nhãn | Nghĩa |
 |---|---|
-| **(đo)** | Đo trực tiếp trên hệ thống Tú Lệ Trace đang chạy, ngày 20/10/2026. Mục 8 ghi đúng lệnh để đo lại. |
+| **(đo)** | Đo trực tiếp trên hệ thống Tú Lệ Trace đang chạy, ngày 21/10/2026. Mục 8 ghi đúng lệnh để đo lại. |
 | **(nguồn)** | Lấy từ tài liệu công khai của nền tảng đó, có dẫn nguồn ở mục 9. Nhóm không tự đo. |
 | **(tính)** | Suy ra bằng phép tính từ bảng giá gas công khai, có ghi phép tính. |
 
@@ -119,7 +119,7 @@ Bảy tiêu chí, xếp theo mức quan trọng với một cơ sở sản xuấ
 
 ### 4.3 Số liệu đo được trên phương án đã chọn
 
-Đo ngày 20/10/2026 bằng `node worker/scripts/do-chi-so-chuoi.mjs`, đọc trực
+Đo ngày 21/10/2026 bằng `node worker/scripts/do-chi-so-chuoi.mjs`, đọc trực
 tiếp từ RPC của mạng, không qua lớp trung gian nào (đo):
 
 | Chỉ số | Giá trị |
@@ -128,15 +128,17 @@ tiếp từ RPC của mạng, không qua lớp trung gian nào (đo):
 | Hợp đồng lưu mã băm | `0xcd6811f9a06d706978033edb6ecaf72d37ffd3ca` |
 | Thời gian ra khối | 2,00 giây/khối (trung bình 200 khối gần nhất) |
 | Giá gas | 0,1 gwei |
-| Gas mỗi giao dịch neo | 29.285 – 29.345 đơn vị, trung bình 29.295 |
+| Gas mỗi giao dịch neo | 29.285 – 29.345 đơn vị, trung bình 29.293 |
 | Phí mỗi giao dịch neo | 0,00000366 VNX |
-| Độ trễ công bố → có trên chuỗi | 1 – 2 giây |
-| Số lô đã neo | 6 lô, cả 6 đều ở trạng thái ĐÃ XÁC MINH |
+| Độ trễ công bố → có trên chuỗi | 1 – 5 giây |
+| Số lô đã neo | 8 lô, cả 8 đều ở trạng thái ĐÃ XÁC MINH và đã có giao dịch được xác nhận |
 
 Danh sách giao dịch thật của từng lô (đo):
 
 | Lô | Khối | Gas | Trạng thái |
 |---|---|---|---|
+| TL-2026-001 | 5.783.872 | 29.285 | ĐÃ XÁC MINH |
+| TL-2026-002 | 5.783.848 | 29.285 | ĐÃ XÁC MINH |
 | TL-2026-003 | 5.783.886 | 29.285 | ĐÃ XÁC MINH |
 | TL-2026-004 | 5.783.899 | 29.285 | ĐÃ XÁC MINH |
 | NL-TRAU-2026-001 | 5.785.027 | 29.345 | ĐÃ XÁC MINH |
@@ -192,9 +194,9 @@ Phần này **cố ý không nằm trong bản công bố và không vào mã b�
   chuyển sang trạng thái "dữ liệu đã thay đổi", và phải neo một giao dịch mới
   cho mỗi lần ai đó bấm sao.
 
-Kiểm chứng điều này (đo): sau khi 26 đánh giá được ghi vào hệ thống ngày
-20/10/2026, trạng thái toàn vẹn của cả 6 lô vẫn là ĐÃ XÁC MINH và mã băm không
-đổi. Đây chính là cách phân tách hai dòng dữ liệu: thứ đã niêm phong và thứ còn
+Kiểm chứng điều này (đo): sau khi 27 đánh giá được ghi vào hệ thống, trạng thái
+toàn vẹn của cả 8 lô đã công bố vẫn là ĐÃ XÁC MINH và mã băm không đổi (kiểm
+lại ngày 21/10/2026). Đây chính là cách phân tách hai dòng dữ liệu: thứ đã niêm phong và thứ còn
 thay đổi.
 
 Chống gửi trùng: máy khách sinh một mã ẩn danh và lưu lại; máy chủ lưu **mã băm
@@ -259,5 +261,5 @@ Mọi số có nhãn (đo) đều kiểm lại được, không cần quyền qu
    (`tools/seed_ratings.py --clear` rồi `tools/nhap_khao_sat.py <tệp.csv>`), và
    trong báo cáo phải ghi đúng nguồn số liệu là phiếu khảo sát nào, bao nhiêu
    người, khảo sát khi nào.
-4. Số liệu đo trong tài liệu chốt ngày 20/10/2026. Nếu bảo vệ sau đó một thời
+4. Số liệu đo trong tài liệu chốt ngày 21/10/2026. Nếu bảo vệ sau đó một thời
    gian dài thì chạy lại lệnh ở mục 8 để số khối và số lô khớp thực tế.

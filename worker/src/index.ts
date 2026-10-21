@@ -147,9 +147,17 @@ app.get('/api/health', (c) =>
   }),
 );
 
-app.get('/api/public/batches', async (c) =>
-  c.json(await trace.publicBatches(c.env.DB)),
-);
+// Mặc định 6 lô cho trang chủ; `?limit=` để công cụ đo lấy hết danh sách đã
+// công bố. publicBatches tự chặn trên ở 20.
+app.get('/api/public/batches', async (c) => {
+  const asked = Number(c.req.query('limit'));
+  return c.json(
+    await trace.publicBatches(
+      c.env.DB,
+      Number.isInteger(asked) && asked > 0 ? asked : 6,
+    ),
+  );
+});
 
 app.get('/api/public/catalog', async (c) =>
   c.json(await trace.publicCatalog(c.env.DB)),
