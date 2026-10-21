@@ -28,7 +28,7 @@ Hai chỗ khác với bản nháp đang có trong báo cáo:
 |---|---|---|
 | Số người sử dụng | **1 tài khoản quản trị** (dùng chung cho hai cơ sở nhập liệu). Hệ thống cố ý không bắt người mua đăng ký: quét mã là xem được ngay, không cần tài khoản | Hệ thống tài khoản quản trị, 21/10/2026 |
 | Số người mua tham gia khảo sát | *(lấy từ phiếu khảo sát của nhóm, hệ thống không giữ số này)* | Phiếu khảo sát |
-| Số lượt truy xuất | *(chưa có — xem mục 3)* | Thống kê truy cập Cloudflare |
+| Số lượt truy xuất | **1.806 lượt trong 30 ngày** (21/09 – 21/10/2026), 0 lỗi, trên tên miền `trace.smartbreakfast.store`. Trong 24 giờ gần nhất: 130 lượt. Xem thêm cảnh báo ở mục 3 về việc phần lớn là lượt chạy thử của nhóm | Cloudflare Pages Metrics, dự án `tule-trace`, đọc ngày 21/10/2026 |
 | Đánh giá của người sử dụng | 27 lượt, trung bình 4,56/5 — **nhưng 26 trong số đó là dữ liệu dựng sẵn để thử giao diện**, chỉ 1 lượt là người thật gửi. Xem cảnh báo bên dưới | Mục đánh giá trên trang truy xuất, 21/10/2026 |
 
 Điểm trung bình theo từng lô (gồm cả dữ liệu dựng sẵn): TL-2026-003: 4,67 ·
@@ -47,27 +47,37 @@ TL-2026-004: 4,43 · TB-2026-001: 4,4 · TB-2026-002: 4,6 · TB-2026-003: 4,75.
 > python tools/nhap_khao_sat.py phieu.csv --production
 > ```
 
-## 3. Số lượt truy xuất lấy ở đâu
+## 3. Số lượt truy xuất: con số và chỗ phải cẩn thận
 
 Hệ thống không tự đếm lượt xem: không ghi nhật ký truy cập, không đặt mã theo
 dõi người dùng. Đây là chủ ý, và là thứ sẽ khai trong hồ sơ App Store rằng ứng
-dụng không thu thập dữ liệu nào. Vì vậy số lượt truy cập chỉ có ở lớp hạ tầng
-Cloudflare, lấy theo một trong ba cách:
+dụng không thu thập dữ liệu nào. Số lượt truy cập vì vậy chỉ có ở lớp hạ tầng
+Cloudflare. Đọc ngày 21/10/2026:
 
-1. **Đọc trên bảng điều khiển** (nhanh nhất, không cần làm gì thêm):
-   dash.cloudflare.com → Workers & Pages → `tule-trace` → tab **Metrics**. Chọn
-   khoảng 30 ngày, lấy con số *Requests*. Lưu ý số đó gồm cả ảnh và tệp tĩnh,
-   nên lớn hơn số lượt xem hồ sơ; muốn sát hơn thì đọc dòng của đường dẫn
-   `/t/*`.
-2. **Mở Web Analytics** cho tên miền `trace.smartbreakfast.store` nếu muốn có số
-   lượt xem trang theo ngày, chuẩn hơn để trích vào báo cáo.
-3. **Tạo API token** (quyền *Account Analytics: Read*) rồi đưa cho tôi, tôi lấy
-   số theo ngày bằng API và ghi kèm cách kiểm lại như các chỉ số khác. Token
-   đăng nhập sẵn của công cụ dòng lệnh không có quyền đọc phần thống kê.
+| Chỉ số | 30 ngày | 24 giờ |
+|---|---|---|
+| Lượt gọi tới trang truy xuất và API trên tên miền chính (Cloudflare Pages) | 1.806, 0 lỗi | 130 |
+| Lượt chạy của máy chủ xử lý dữ liệu (Cloudflare Worker), gồm cả 4.320 lượt tự chạy theo lịch 10 phút/lần để neo chuỗi | 6.490, 0 lỗi | 327 |
+| Lượt gọi sang RPC của mạng VBSN | 587 | — |
 
-Nếu muốn **hệ thống tự đếm** từ nay về sau thì làm được: thêm một bộ đếm lượt mở
-hồ sơ theo từng lô, chỉ đếm số, không ghi ai xem. Nhưng số sẽ bắt đầu từ ngày
-bật, nên không dùng cho báo cáo lần này được.
+> **Chỗ phải cẩn thận.** Con số 1.806 là lưu lượng của 30 ngày hệ thống đang
+> được xây dựng và chạy thử, nên phần lớn là lượt mở của nhóm phát triển, không
+> phải lượt quét mã của người mua. Viết vào báo cáo thì nên ghi đúng là "lượt
+> truy cập hệ thống trong 30 ngày vận hành thử", đừng gọi là lượt truy xuất của
+> khách hàng. Muốn có con số sạch thì tính từ ngày phát mã QR thật ra thị
+> trường.
+
+Ba cách lấy lại hoặc làm cho số sạch hơn:
+
+1. **Đọc lại trên bảng điều khiển**: dash.cloudflare.com → Workers & Pages →
+   `tule-trace` (dự án Pages) → tab **Metrics** → chọn *Last 30 days*. Con số
+   *Requests* chính là 1.806 ở trên. Trang này chụp màn hình làm minh chứng
+   được.
+2. **Bật Web Analytics** cho `trace.smartbreakfast.store` nếu muốn số lượt xem
+   trang theo ngày và theo đường dẫn, tách được lô nào hay được quét nhất.
+3. **Hệ thống tự đếm**: thêm bộ đếm lượt mở hồ sơ theo từng lô, chỉ đếm số,
+   không ghi ai xem. Số bắt đầu từ ngày bật nên không dùng cho báo cáo lần này,
+   nhưng từ lúc phát QR thật thì đây là nguồn sạch nhất.
 
 ## 4. Cách lấy lại các con số này
 
