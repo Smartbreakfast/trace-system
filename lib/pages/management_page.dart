@@ -8,6 +8,7 @@ import '../data/trace_api.dart';
 import '../main.dart' show traceUrlFor;
 import '../models/ingredient_draft.dart';
 import '../models/trace_models.dart';
+import '../ui/accounts_section.dart';
 import '../ui/admin_login.dart';
 import '../ui/async_states.dart';
 import '../ui/management_components.dart';
@@ -51,6 +52,17 @@ class _ManagementPageState extends State<ManagementPage> {
 
   bool authChecked = false;
   bool authorized = false;
+
+  /// Người đang đăng nhập. Null khi chưa vào. Bảng quyền đi kèm quyết định mục
+  /// nào hiện ra; worker vẫn kiểm lại mọi request nên đây chỉ là phép lịch sự
+  /// với người dùng, không phải lớp bảo vệ.
+  AdminUser? me;
+
+  List<AdminAccount> accounts = const [];
+  List<Map<String, dynamic>> facilities = const [];
+  List<AuditEntry> auditEntries = const [];
+  bool loadingAccounts = false;
+  bool loadingAudit = false;
 
   Map<String, dynamic>? summary;
   bool loadingSummary = true;
@@ -105,40 +117,71 @@ class _ManagementPageState extends State<ManagementPage> {
     }
     api.adminToken = token;
     try {
-      await api.checkSession();
+      final user = await api.checkSession();
       if (!mounted) return;
       setState(() {
         authChecked = true;
         authorized = true;
+        me = user;
       });
       await _refresh();
     } on TraceApiFailure {
       api.adminToken = null;
+      await AdminSession.clear();
       if (mounted) setState(() => authChecked = true);
     }
   }
 
-  Future<void> _signIn(String token) async {
+  /// Đăng nhập bằng tài khoản.
+  Future<void> _signIn(String username, String password) async {
+    final user = await api.login(username, password);
+    await AdminSession.save(api.adminToken ?? '');
+    if (!mounted) return;
+    setState(() {
+      authorized = true;
+      me = user;
+    });
+    await _refresh();
+  }
+
+  /// Vào bằng ADMIN_TOKEN: cửa dự phòng, vẫn phải hỏi worker mình được làm gì.
+  Future<void> _signInWithToken(String token) async {
     api.adminToken = token;
-    await api.checkSession();
+    final user = await api.checkSession();
     await AdminSession.save(token);
     if (!mounted) return;
-    setState(() => authorized = true);
+    setState(() {
+      authorized = true;
+      me = user;
+    });
     await _refresh();
   }
 
   Future<void> _signOut() async {
+    await api.logout();
     await AdminSession.clear();
     api.adminToken = null;
     if (!mounted) return;
     setState(() {
       authorized = false;
+      me = null;
+      section = AdminSection.overview;
       batches = const [];
+      accounts = const [];
+      auditEntries = const [];
       openCode = null;
       openBatch = null;
       summary = null;
     });
   }
+
+  /// Mục người này được thấy, theo bảng quyền của chính họ.
+  List<AdminSection> get visibleSections => [
+    for (final item in AdminSection.values)
+      if (item.permission == null || (me?.can(item.permission!) ?? false)) item,
+  ];
+
+  bool _can(String permission) => me?.can(permission) ?? false;
 
   void _notify(String text, {bool danger = false}) {
     if (!mounted) return;
@@ -152,7 +195,9 @@ class _ManagementPageState extends State<ManagementPage> {
       );
   }
 
-  /// Token bị thu hồi giữa chừng thì đưa thẳng về màn đăng nhập.
+  /// Phiên hết hạn thì đưa thẳng về màn đăng nhập. Còn 403 (đúng người, sai
+  /// quyền) thì chỉ báo một dòng: đẩy người ta ra ngoài vì bấm nhầm một nút là
+  /// làm mất cả việc đang nhập.
   void _fail(TraceApiFailure error) {
     if (error is TraceUnauthorized) _signOut();
     _notify(error.message, danger: true);
@@ -161,7 +206,109 @@ class _ManagementPageState extends State<ManagementPage> {
   // --------------------------------------------------------------- dữ liệu
 
   Future<void> _refresh() async {
-    await Future.wait([_loadSummary(), _loadBatches(), _loadProducts(), _loadChain()]);
+    await Future.wait([
+      _loadSummary(),
+      _loadBatches(),
+      _loadProducts(),
+      _loadChain(),
+      if (_can('manageUsers')) _loadAccounts(),
+      if (_can('viewAudit')) _loadAudit(),
+    ]);
+  }
+
+  Future<void> _loadAccounts() async {
+    setState(() => loadingAccounts = true);
+    try {
+      final list = await api.listUsers();
+      final places = await api.listFacilities();
+      if (mounted) {
+        setState(() {
+          accounts = list;
+          facilities = places;
+        });
+      }
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    } finally {
+      if (mounted) setState(() => loadingAccounts = false);
+    }
+  }
+
+  Future<void> _loadAudit() async {
+    setState(() => loadingAudit = true);
+    try {
+      final list = await api.auditLog(limit: 120);
+      if (mounted) setState(() => auditEntries = list);
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    } finally {
+      if (mounted) setState(() => loadingAudit = false);
+    }
+  }
+
+  Future<void> _createAccount() async {
+    final values = await AccountCreateDialog.show(context, facilities);
+    if (values == null) return;
+    try {
+      await api.createUser(
+        username: values.username,
+        password: values.password,
+        fullName: values.fullName,
+        role: values.role,
+        facilityId: values.facilityId,
+      );
+      _notify('Đã tạo tài khoản ${values.username}.');
+      await _loadAccounts();
+      await _loadAudit();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
+  }
+
+  Future<void> _toggleAccount(AdminAccount account, bool active) async {
+    try {
+      await api.updateUser(account.id, {'active': active});
+      _notify(
+        active
+            ? 'Đã mở lại tài khoản ${account.username}.'
+            : 'Đã khoá tài khoản ${account.username}.',
+      );
+      await _loadAccounts();
+      await _loadAudit();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
+  }
+
+  Future<void> _resetAccountPassword(AdminAccount account) async {
+    final password = await PasswordDialog.show(
+      context,
+      title: 'Đặt lại mật khẩu cho ${account.username}',
+    );
+    if (password == null) return;
+    try {
+      await api.updateUser(account.id, {'password': password});
+      // Worker xoá mọi phiên của người đó, nên họ phải đăng nhập lại.
+      _notify('Đã đặt lại mật khẩu. ${account.username} phải đăng nhập lại.');
+      await _loadAudit();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
+  }
+
+  Future<void> _changeOwnPassword() async {
+    final values = await OwnPasswordDialog.show(context);
+    if (values == null || values.length != 2) return;
+    try {
+      await api.changeOwnPassword(
+        currentPassword: values[0],
+        newPassword: values[1],
+      );
+      _notify('Đã đổi mật khẩu. Đăng nhập lại bằng mật khẩu mới.');
+      await _signOut();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
   }
 
   Future<void> _loadProducts() async {
@@ -350,6 +497,7 @@ class _ManagementPageState extends State<ManagementPage> {
       return TuleWebFrame(
         child: AdminLogin(
           onSubmit: _signIn,
+          onToken: _signInWithToken,
           onExplorer: () => context.go('/'),
           endpoint: api.baseUrl,
         ),
@@ -363,6 +511,8 @@ class _ManagementPageState extends State<ManagementPage> {
           if (wide)
             ManagementSidebar(
               section: section,
+              sections: visibleSections,
+              footer: _footer(),
               onSelect: _selectSection,
               onExplorer: () => context.go('/'),
             ),
@@ -386,6 +536,21 @@ class _ManagementPageState extends State<ManagementPage> {
                     ],
                     if (section == AdminSection.overview)
                       _overview()
+                    else if (section == AdminSection.accounts)
+                      AccountsPanel(
+                        accounts: accounts,
+                        facilities: facilities,
+                        loading: loadingAccounts,
+                        onCreate: _createAccount,
+                        onToggleActive: _toggleAccount,
+                        onResetPassword: _resetAccountPassword,
+                      )
+                    else if (section == AdminSection.audit)
+                      AuditPanel(
+                        entries: auditEntries,
+                        loading: loadingAudit,
+                        onRefresh: _loadAudit,
+                      )
                     else if (openCode == null)
                       _batchList()
                     else
@@ -400,9 +565,20 @@ class _ManagementPageState extends State<ManagementPage> {
     );
   }
 
+  /// Dòng cuối thanh bên: ai đang đăng nhập và thuộc cơ sở nào.
+  String _footer() {
+    final user = me;
+    if (user == null) return 'TÚ LỆ TRACE';
+    return [
+      user.displayName.toUpperCase(),
+      user.roleLabel.toUpperCase(),
+      if (user.facilityName.isNotEmpty) user.facilityName,
+    ].join('\n');
+  }
+
   void _selectSection(AdminSection value) => setState(() {
     section = value;
-    if (value == AdminSection.overview) {
+    if (value != AdminSection.batches) {
       openCode = null;
       openBatch = null;
       openBatchId = null;
@@ -412,12 +588,29 @@ class _ManagementPageState extends State<ManagementPage> {
   Widget _topBar(bool wide) => Row(
     children: [
       if (!wide) TuleBrand(onTap: () => context.go('/')),
+      if (wide && me != null)
+        Flexible(
+          child: Text(
+            me!.viaToken
+                ? 'Đang vào bằng token quản trị'
+                : '${me!.displayName} · ${me!.roleLabel}'
+                      '${me!.facilityName.isEmpty ? '' : ' · ${me!.facilityName}'}',
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: brandMuted, fontSize: 13),
+          ),
+        ),
       const Spacer(),
       IconButton(
         tooltip: 'Tải lại dữ liệu',
         onPressed: loadingBatches ? null : _refresh,
         icon: const Icon(Icons.refresh),
       ),
+      if (me != null && !me!.viaToken)
+        IconButton(
+          tooltip: 'Đổi mật khẩu',
+          onPressed: _changeOwnPassword,
+          icon: const Icon(Icons.password_outlined),
+        ),
       IconButton(
         tooltip: 'Đăng xuất quản trị',
         onPressed: _signOut,
@@ -501,16 +694,18 @@ class _ManagementPageState extends State<ManagementPage> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           const Text('Lô sản phẩm', style: pageTitleStyle),
-          OutlinedButton.icon(
-            onPressed: _createCatalogProduct,
-            icon: const Icon(Icons.category_outlined, size: 18),
-            label: const Text('Thêm sản phẩm'),
-          ),
-          FilledButton.icon(
-            onPressed: _createBatch,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Tạo lô mới'),
-          ),
+          if (_can('manageCatalog'))
+            OutlinedButton.icon(
+              onPressed: _createCatalogProduct,
+              icon: const Icon(Icons.category_outlined, size: 18),
+              label: const Text('Thêm sản phẩm'),
+            ),
+          if (_can('manageBatch'))
+            FilledButton.icon(
+              onPressed: _createBatch,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Tạo lô mới'),
+            ),
         ],
       ),
       const SizedBox(height: 18),
@@ -609,10 +804,11 @@ class _ManagementPageState extends State<ManagementPage> {
       return StatusMessage(
         icon: Icons.inventory_2_outlined,
         title: 'Chưa có lô nào',
-        body:
-            'Tạo lô thành phẩm đầu tiên để sinh mã truy xuất và mã QR cho bao bì.',
-        actionLabel: 'Tạo lô mới',
-        onAction: _createBatch,
+        body: _can('manageBatch')
+            ? 'Tạo lô thành phẩm đầu tiên để sinh mã truy xuất và mã QR cho bao bì.'
+            : 'Cơ sở của bạn chưa có lô nào. Người phụ trách cơ sở là người tạo lô.',
+        actionLabel: _can('manageBatch') ? 'Tạo lô mới' : null,
+        onAction: _can('manageBatch') ? _createBatch : null,
       );
     }
     final items = limit == null ? batches : batches.take(limit).toList();
@@ -668,7 +864,6 @@ class _ManagementPageState extends State<ManagementPage> {
               'title': step.title,
               'description': step.description,
               'eventDate': result.values['productionDate'],
-              'enteredBy': 'admin',
               'position': index,
             });
           }
@@ -681,7 +876,6 @@ class _ManagementPageState extends State<ManagementPage> {
             'title': step.title,
             'description': step.description,
             'eventDate': result.values['productionDate'],
-            'enteredBy': 'admin',
             'position': index,
           });
         }
@@ -782,16 +976,17 @@ class _ManagementPageState extends State<ManagementPage> {
                     onEditEvent: (event) => _editEvent(event, item.name),
                   ),
                 ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: batchId == null
-                      ? null
-                      : () => _addIngredient(batchId),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Thêm nguyên liệu'),
+              if (_can('manageBatch'))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: batchId == null
+                        ? null
+                        : () => _addIngredient(batchId),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Thêm nguyên liệu'),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -898,29 +1093,38 @@ class _ManagementPageState extends State<ManagementPage> {
           ),
         ],
         const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: publishing ? null : () => _publish(record.batch.code),
-          icon: publishing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Icon(Icons.publish, size: 18),
-          label: Text(
-            record.batch.isPublished ? 'Lưu bản mới' : 'Hoàn thành lô',
+        if (_can('publish'))
+          FilledButton.icon(
+            onPressed: publishing ? null : () => _publish(record.batch.code),
+            icon: publishing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.publish, size: 18),
+            label: Text(
+              record.batch.isPublished ? 'Lưu bản mới' : 'Hoàn thành lô',
+            ),
+          )
+        else
+          const Text(
+            'Bạn khai báo được công đoạn và ảnh, còn việc chốt bản công bố và '
+            'neo mã băm lên blockchain do người phụ trách cơ sở làm.',
+            style: TextStyle(color: brandMuted, height: 1.5),
           ),
-        ),
         if (snapshots.isNotEmpty) ...[
           const SizedBox(height: 14),
           ChainStatusLine(
             snapshots: snapshots,
             chain: chain,
             sending: sendingToChain,
-            onSend: _sendToChain,
+            // Nút gửi tay là việc của quản trị hệ thống; người khác chỉ xem
+            // trạng thái, cron vẫn tự gửi.
+            onSend: _can('manageChain') ? _sendToChain : null,
           ),
           const SizedBox(height: 18),
           SealHistory(
@@ -1056,7 +1260,6 @@ class _ManagementPageState extends State<ManagementPage> {
     try {
       await api.createEvent({
         'productBatchId': batchId,
-        'enteredBy': 'admin',
         ...eventBody(result),
       });
       await _reloadBatch();
@@ -1092,7 +1295,6 @@ class _ManagementPageState extends State<ManagementPage> {
     try {
       await api.createEvent({
         'ingredientBatchId': item.id,
-        'enteredBy': 'admin',
         ...eventBody(result),
       });
       await _reloadBatch();

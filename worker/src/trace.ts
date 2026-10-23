@@ -417,19 +417,34 @@ export async function publicCatalog(db: D1Database): Promise<PublicProduct[]> {
 }
 
 /** Catalog sản phẩm cho Management. Không expose các trường vận hành nhạy cảm. */
-export async function listProducts(db: D1Database) {
+/// `facilityId` khác null thì chỉ trả sản phẩm của cơ sở đó: người của cơ sở
+/// này không có việc gì với danh mục của cơ sở kia.
+export async function listProducts(
+  db: D1Database,
+  facilityId: number | null = null,
+) {
+  const scope = facilityId === null ? '' : 'AND facility_id = ?';
+  const args = facilityId === null ? [] : [facilityId];
   return all(
     db,
-    `SELECT id, sku, name, description, template_key as templateKey, status
+    `SELECT id, sku, name, description, template_key as templateKey, status,
+            facility_id as facilityId
        FROM products
-      WHERE status = 'ACTIVE'
+      WHERE status = 'ACTIVE' ${scope}
       ORDER BY name COLLATE NOCASE, id`,
+    ...args,
   );
 }
 
 export async function createCatalogProduct(
   db: D1Database,
-  body: { sku: string; name: string; description?: string; templateKey?: string },
+  body: {
+    sku: string;
+    name: string;
+    description?: string;
+    templateKey?: string;
+    facilityId?: number | null;
+  },
 ) {
   const sku = body.sku.trim().toLowerCase();
   const duplicate = await first(db, 'SELECT id FROM products WHERE sku = ?', sku);
@@ -438,15 +453,16 @@ export async function createCatalogProduct(
   }
   const row = await db
     .prepare(
-      `INSERT INTO products (sku, name, description, template_key, status, created_at)
-       VALUES (?, ?, ?, ?, 'ACTIVE', ?) RETURNING id, sku, name, description,
-       template_key as templateKey, status`,
+      `INSERT INTO products (sku, name, description, template_key, facility_id, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?) RETURNING id, sku, name, description,
+       template_key as templateKey, facility_id as facilityId, status`,
     )
     .bind(
       sku,
       body.name.trim(),
       body.description ?? '',
       body.templateKey ?? '',
+      body.facilityId ?? null,
       nowIso(),
     )
     .first<Row>();
@@ -693,21 +709,76 @@ export async function outboxSummary(db: D1Database) {
   return { byStatus, lastError: lastFailed?.last_error ?? '' };
 }
 
-export async function summary(db: D1Database) {
+/// `facilityId` khác null thì mọi con số chỉ tính dữ liệu của cơ sở đó, để
+/// người phụ trách cơ sở không đọc được quy mô của cơ sở bên cạnh.
+export async function summary(
+  db: D1Database,
+  facilityId: number | null = null,
+) {
+  // Số này ghép thẳng vào câu SQL nên phải là số nguyên thật. Nó đến từ phiên
+  // đăng nhập chứ không từ client, nhưng một lần kiểm vẫn rẻ hơn một lỗ hổng.
+  const of = facilityId === null ? null : Math.trunc(Number(facilityId));
+  if (of !== null && !Number.isSafeInteger(of)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'Mã cơ sở không hợp lệ.');
+  }
+  const scoped = of !== null;
+  // Lô của một cơ sở = lô có catalog sản phẩm thuộc cơ sở đó.
+  const batchScope = scoped
+    ? `JOIN products c ON c.id = p.product_id AND c.facility_id = ${of}`
+    : '';
+  const ingredientScope = scoped
+    ? `JOIN product_batches p ON p.id = i.product_batch_id
+       JOIN products c ON c.id = p.product_id AND c.facility_id = ${of}`
+    : '';
+  const eventScope = scoped
+    ? `LEFT JOIN ingredient_batches i ON i.id = e.ingredient_batch_id
+       JOIN product_batches p ON p.id = COALESCE(i.product_batch_id, e.product_batch_id)
+       JOIN products c ON c.id = p.product_id AND c.facility_id = ${of}`
+    : '';
+
   const [products, batches, published, ingredients, events, media, pending] =
     await Promise.all([
-      count(db, 'SELECT COUNT(*) as count FROM products'),
-      count(db, 'SELECT COUNT(*) as count FROM product_batches'),
       count(
         db,
-        "SELECT COUNT(*) as count FROM product_batches WHERE status = 'PUBLISHED'",
+        scoped
+          ? `SELECT COUNT(*) as count FROM products WHERE facility_id = ${of}`
+          : 'SELECT COUNT(*) as count FROM products',
       ),
-      count(db, 'SELECT COUNT(*) as count FROM ingredient_batches'),
-      count(db, 'SELECT COUNT(*) as count FROM process_events'),
-      count(db, 'SELECT COUNT(*) as count FROM media_assets'),
       count(
         db,
-        "SELECT COUNT(*) as count FROM blockchain_outbox WHERE status = 'PENDING_NETWORK'",
+        `SELECT COUNT(*) as count FROM product_batches p ${batchScope}`,
+      ),
+      count(
+        db,
+        `SELECT COUNT(*) as count FROM product_batches p ${batchScope}
+          WHERE p.status = 'PUBLISHED'`,
+      ),
+      count(
+        db,
+        `SELECT COUNT(*) as count FROM ingredient_batches i ${ingredientScope}`,
+      ),
+      count(db, `SELECT COUNT(*) as count FROM process_events e ${eventScope}`),
+      count(
+        db,
+        scoped
+          ? `SELECT COUNT(*) as count FROM media_assets m
+               WHERE (m.owner_type = 'product_batch' AND m.owner_id IN (
+                        SELECT p.id FROM product_batches p ${batchScope}))
+                  OR (m.owner_type = 'ingredient_batch' AND m.owner_id IN (
+                        SELECT i.id FROM ingredient_batches i ${ingredientScope}))
+                  OR (m.owner_type = 'process_event' AND m.owner_id IN (
+                        SELECT e.id FROM process_events e ${eventScope}))`
+          : 'SELECT COUNT(*) as count FROM media_assets',
+      ),
+      count(
+        db,
+        scoped
+          ? `SELECT COUNT(*) as count FROM blockchain_outbox o
+               JOIN published_snapshots s ON s.id = o.snapshot_id
+               JOIN product_batches p ON p.id = s.product_batch_id
+               JOIN products c ON c.id = p.product_id AND c.facility_id = ${of}
+              WHERE o.status = 'PENDING_NETWORK'`
+          : "SELECT COUNT(*) as count FROM blockchain_outbox WHERE status = 'PENDING_NETWORK'",
       ),
     ]);
   return {
@@ -739,6 +810,8 @@ export async function listBatches(
     sort?: string;
     page?: number;
     limit?: number;
+    /// null = mọi cơ sở (chỉ quản trị hệ thống mới được truyền null).
+    facilityId?: number | null;
   } = {},
 ) {
   const order = BATCH_ORDER[options.sort ?? 'newest'] ?? BATCH_ORDER.newest;
@@ -758,6 +831,12 @@ export async function listBatches(
   if (sku) {
     conditions.push('c.sku = ?');
     args.push(sku);
+  }
+  // Lọc theo cơ sở ở đây, trong câu SQL, chứ không lọc lại ở client: ẩn trên
+  // giao diện mà API vẫn trả thì chỉ cần mở tab mạng là thấy hết.
+  if (options.facilityId !== undefined && options.facilityId !== null) {
+    conditions.push('c.facility_id = ?');
+    args.push(options.facilityId);
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 

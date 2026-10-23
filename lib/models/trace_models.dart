@@ -788,3 +788,145 @@ class BatchListItem {
     productSku: _str(json, ['product_sku', 'productSku']),
   );
 }
+
+/// Người đang đăng nhập màn quản trị, kèm bảng quyền do worker trả về.
+///
+/// Giao diện không tự suy quyền từ vai trò: worker là nơi duy nhất chốt, còn
+/// đây chỉ đọc lại để ẩn những nút mà bấm vào cũng bị từ chối. Ẩn nút là lịch
+/// sự với người dùng, không phải lớp bảo vệ.
+class AdminUser {
+  const AdminUser({
+    required this.username,
+    required this.fullName,
+    required this.role,
+    required this.roleLabel,
+    required this.facilityId,
+    required this.facilityName,
+    required this.viaToken,
+    required this.permissions,
+  });
+
+  final String username;
+  final String fullName;
+  final String role;
+  final String roleLabel;
+  final int? facilityId;
+  final String facilityName;
+  final bool viaToken;
+  final Map<String, bool> permissions;
+
+  bool can(String permission) => permissions[permission] ?? false;
+
+  /// Tên hiện trên thanh trên: họ tên nếu có, không thì tên đăng nhập.
+  String get displayName => fullName.isNotEmpty ? fullName : username;
+
+  factory AdminUser.fromApi(Map<String, dynamic> json) {
+    final raw = json['permissions'];
+    return AdminUser(
+      username: '${json['username'] ?? ''}',
+      fullName: '${json['fullName'] ?? ''}',
+      role: '${json['role'] ?? ''}',
+      roleLabel: '${json['roleLabel'] ?? ''}',
+      facilityId: (json['facilityId'] as num?)?.toInt(),
+      facilityName: '${json['facilityName'] ?? ''}',
+      viaToken: json['viaToken'] == true,
+      permissions: {
+        if (raw is Map)
+          for (final entry in raw.entries)
+            '${entry.key}': entry.value == true,
+      },
+    );
+  }
+}
+
+/// Một tài khoản trong danh sách quản lý người dùng.
+class AdminAccount {
+  const AdminAccount({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.role,
+    required this.active,
+    required this.facilityId,
+    required this.facilityName,
+    required this.lastLoginAt,
+  });
+
+  final int id;
+  final String username;
+  final String fullName;
+  final String role;
+  final bool active;
+  final int? facilityId;
+  final String facilityName;
+  final String lastLoginAt;
+
+  factory AdminAccount.fromApi(Map<String, dynamic> json) => AdminAccount(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    username: '${json['username'] ?? ''}',
+    fullName: '${json['fullName'] ?? ''}',
+    role: '${json['role'] ?? ''}',
+    active: (json['active'] as num?)?.toInt() == 1 || json['active'] == true,
+    facilityId: (json['facilityId'] as num?)?.toInt(),
+    facilityName: '${json['facilityName'] ?? ''}',
+    lastLoginAt: '${json['lastLoginAt'] ?? ''}',
+  );
+}
+
+/// Một dòng nhật ký thao tác.
+class AuditEntry {
+  const AuditEntry({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.role,
+    required this.action,
+    required this.target,
+    required this.detail,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String username;
+  final String fullName;
+  final String role;
+  final String action;
+  final String target;
+  final String detail;
+  final String createdAt;
+
+  factory AuditEntry.fromApi(Map<String, dynamic> json) => AuditEntry(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    username: '${json['username'] ?? ''}',
+    fullName: '${json['fullName'] ?? ''}',
+    role: '${json['role'] ?? ''}',
+    action: '${json['action'] ?? ''}',
+    target: '${json['target'] ?? ''}',
+    detail: '${json['detail'] ?? ''}',
+    createdAt: '${json['createdAt'] ?? ''}',
+  );
+
+  /// Nhãn tiếng Việt của việc đã làm. Nhật ký để người đọc, không để máy đọc.
+  String get actionLabel => switch (action) {
+    'LOGIN' => 'Đăng nhập',
+    'CREATE_USER' => 'Tạo tài khoản',
+    'UPDATE_USER' => 'Sửa tài khoản',
+    'CHANGE_PASSWORD' => 'Đổi mật khẩu',
+    'CREATE_PRODUCT' => 'Thêm sản phẩm',
+    'CREATE_BATCH' => 'Tạo lô',
+    'UPDATE_BATCH' => 'Sửa lô',
+    'PUBLISH' => 'Công bố lô',
+    'CREATE_INGREDIENT' => 'Thêm nguyên liệu',
+    'UPDATE_INGREDIENT' => 'Sửa nguyên liệu',
+    'DELETE_INGREDIENT' => 'Xoá nguyên liệu',
+    'CREATE_EVENT' => 'Khai công đoạn',
+    'UPDATE_EVENT' => 'Sửa công đoạn',
+    'DELETE_EVENT' => 'Xoá công đoạn',
+    'UPLOAD_MEDIA' => 'Tải ảnh/tài liệu',
+    'DELETE_MEDIA' => 'Xoá ảnh/tài liệu',
+    'CHAIN_SEND' => 'Gửi lên blockchain',
+    'CHAIN_RETRY' => 'Thử lại hàng chờ',
+    'DELETE_RATINGS' => 'Xoá đánh giá',
+    _ => action,
+  };
+}

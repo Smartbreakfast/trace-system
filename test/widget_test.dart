@@ -150,6 +150,43 @@ MockClient _healthyClient() => MockClient((request) async {
 
 /// Trả JSON dạng byte UTF-8 giống server thật, vì `Response(String, ...)`
 /// mã hoá latin1 và sẽ nổ ngay khi gặp tiếng Việt có dấu.
+/// Hồ sơ phiên mà worker trả về cho /admin/session và /auth/login.
+///
+/// Bảng quyền đi kèm chính là thứ giao diện đọc để ẩn nút, nên test phải dựng
+/// đúng hình dạng đó thay vì chỉ trả {ok: true} như hồi còn một token chung.
+Map<String, dynamic> _sessionUser({
+  String role = 'ADMIN',
+  String username = 'quantri',
+  String fullName = 'Người quản trị',
+  int? facilityId,
+  String facilityName = '',
+}) => {
+  'username': username,
+  'fullName': fullName,
+  'role': role,
+  'roleLabel': switch (role) {
+    'ADMIN' => 'quản trị hệ thống',
+    'FACILITY' => 'phụ trách cơ sở',
+    _ => 'nhân viên công đoạn',
+  },
+  'facilityId': facilityId,
+  'facilityName': facilityName,
+  'viaToken': false,
+  'permissions': {
+    'manageUsers': role == 'ADMIN',
+    'viewAudit': role != 'STAFF',
+    'manageCatalog': role == 'ADMIN',
+    'manageBatch': role != 'STAFF',
+    'publish': role != 'STAFF',
+    'manageEvent': true,
+    'manageMedia': true,
+    'manageRatings': role == 'ADMIN',
+    'viewChain': role != 'STAFF',
+    'manageChain': role == 'ADMIN',
+    'allFacilities': role == 'ADMIN',
+  },
+};
+
 Response _json(Object? body, {int status = 200}) => Response.bytes(
   utf8.encode(jsonEncode(body)),
   status,
@@ -196,9 +233,64 @@ Future<void> _openOrigin(WidgetTester tester) async {
 }
 
 /// Backend giả cho các màn quản trị: một lô đã công bố kèm bốn nguyên liệu.
-MockClient _adminClient() => MockClient((request) async {
+MockClient _adminClient({String role = 'ADMIN'}) => MockClient((request) async {
   final path = request.url.path;
-  if (path.endsWith('/admin/session')) return _json({'ok': true});
+  if (path.endsWith('/admin/session')) {
+    return _json({
+      'ok': true,
+      'user': _sessionUser(
+        role: role,
+        username: role == 'STAFF' ? 'lan.say' : 'quantri',
+        fullName: role == 'STAFF' ? 'Nguyễn Thị Lan' : 'Người quản trị',
+        facilityId: role == 'ADMIN' ? null : 1,
+        facilityName: role == 'ADMIN' ? '' : 'Cơ sở Tú Lệ Smart Breakfast',
+      ),
+    });
+  }
+  if (path.endsWith('/admin/facilities')) {
+    return _json([
+      {'id': 1, 'code': 'TULE', 'name': 'Cơ sở Tú Lệ Smart Breakfast'},
+      {'id': 2, 'code': 'TRAU', 'name': 'Cơ sở chế biến thịt trâu gác bếp'},
+    ]);
+  }
+  if (path.endsWith('/admin/users')) {
+    return _json([
+      {
+        'id': 1,
+        'username': 'quantri',
+        'fullName': 'Người quản trị',
+        'role': 'ADMIN',
+        'active': 1,
+        'facilityId': null,
+        'facilityName': '',
+        'lastLoginAt': '2026-10-23T02:00:00.000Z',
+      },
+      {
+        'id': 2,
+        'username': 'lan.say',
+        'fullName': 'Nguyễn Thị Lan',
+        'role': 'STAFF',
+        'active': 1,
+        'facilityId': 1,
+        'facilityName': 'Cơ sở Tú Lệ Smart Breakfast',
+        'lastLoginAt': '',
+      },
+    ]);
+  }
+  if (path.contains('/admin/audit')) {
+    return _json([
+      {
+        'id': 9,
+        'username': 'lan.say',
+        'fullName': 'Nguyễn Thị Lan',
+        'role': 'STAFF',
+        'action': 'CREATE_EVENT',
+        'target': '41',
+        'detail': 'Sấy than hoa',
+        'createdAt': '2026-10-23T03:15:00.000Z',
+      },
+    ]);
+  }
   if (path.endsWith('/admin/products')) {
     return _json([
       {
@@ -601,8 +693,9 @@ void main() {
 
     final api = _api(
       MockClient(
-        (_) async =>
-            _json({'message': 'Token quản trị không đúng.'}, status: 401),
+        (_) async => _json({
+          'message': 'Tên đăng nhập hoặc mật khẩu không đúng.',
+        }, status: 401),
       ),
     );
     await tester.pumpWidget(_adminApp(api));
@@ -611,11 +704,12 @@ void main() {
     expect(find.text('Đăng nhập quản trị'), findsOneWidget);
     expect(find.text('Tổng quan'), findsNothing);
 
-    // Token sai phải báo ngay tại ô nhập, không cho vào Management.
-    await tester.enterText(find.byType(TextField).first, 'sai-token');
+    // Sai mật khẩu phải báo ngay tại ô nhập, không cho vào Management.
+    await tester.enterText(find.byType(TextField).first, 'nguoi-la');
+    await tester.enterText(find.byType(TextField).last, 'mat-khau-sai-1');
     await tester.tap(find.text('Vào Management'));
     await _settle(tester);
-    expect(find.textContaining('Token không đúng'), findsOneWidget);
+    expect(find.textContaining('mật khẩu không đúng'), findsOneWidget);
   });
 
   testWidgets('Management mở lô ra một màn làm việc duy nhất', (tester) async {
@@ -672,7 +766,9 @@ void main() {
     final calls = <Uri>[];
     final client = MockClient((request) async {
       final path = request.url.path;
-      if (path.endsWith('/admin/session')) return _json({'ok': true});
+      if (path.endsWith('/admin/session')) {
+        return _json({'ok': true, 'user': _sessionUser()});
+      }
       if (path.endsWith('/admin/products')) {
         return _json([
           {
@@ -1076,7 +1172,9 @@ void main() {
     final client = MockClient((request) async {
       final path = request.url.path;
       paths.add(path);
-      if (path.endsWith('/admin/session')) return _json({'ok': true});
+      if (path.endsWith('/admin/session')) {
+        return _json({'ok': true, 'user': _sessionUser()});
+      }
       if (path.endsWith('/admin/products')) {
         return _json([
           {
@@ -1426,5 +1524,153 @@ void main() {
     expect(summary.starCount(1), 0);
     expect(summary.comments.single.stars, 5);
     expect(summary.comments.single.authorLabel, 'Khách ẩn danh');
+  });
+
+  // ------------------------------------------------------- phân quyền vai trò
+
+  testWidgets('nhân viên công đoạn không thấy nút tạo lô và nút công bố', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'tule_admin_token': 'phien-staff'});
+
+    await tester.pumpWidget(_adminApp(_api(_adminClient(role: 'STAFF'))));
+    await _settle(tester);
+
+    await tester.tap(find.text('Lô sản phẩm').first);
+    await _settle(tester);
+
+    // Tạo lô và thêm sản phẩm là việc của người phụ trách cơ sở.
+    expect(find.text('Tạo lô mới'), findsNothing);
+    expect(find.text('Thêm sản phẩm'), findsNothing);
+    // Mục tài khoản và nhật ký cũng không thuộc vai trò này.
+    expect(find.text('Tài khoản'), findsNothing);
+    expect(find.text('Nhật ký'), findsNothing);
+
+    await tester.tap(find.textContaining('TL-2026-001').first);
+    await _settle(tester);
+
+    expect(find.text('Hoàn thành lô'), findsOneWidget); // tiêu đề thẻ
+    expect(find.text('Lưu bản mới'), findsNothing); // nút công bố
+    expect(
+      find.textContaining('do người phụ trách cơ sở làm'),
+      findsOneWidget,
+    );
+    // Việc của họ thì vẫn mở: khai công đoạn.
+    expect(find.text('Thêm công đoạn'), findsOneWidget);
+  });
+
+  testWidgets('quản trị thấy mục tài khoản và nhật ký, kèm người đã khai', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'tule_admin_token': 'phien-admin'});
+
+    await tester.pumpWidget(_adminApp(_api(_adminClient())));
+    await _settle(tester);
+
+    expect(find.text('Tài khoản'), findsOneWidget);
+    await tester.tap(find.text('Tài khoản'));
+    await _settle(tester);
+    expect(find.textContaining('Nguyễn Thị Lan (lan.say)'), findsOneWidget);
+    expect(find.text('Thêm tài khoản'), findsOneWidget);
+
+    await tester.tap(find.text('Nhật ký'));
+    await _settle(tester);
+    // Nhật ký phải nói ai làm, không phải "admin".
+    expect(find.textContaining('Khai công đoạn'), findsOneWidget);
+    expect(find.textContaining('Nguyễn Thị Lan'), findsOneWidget);
+  });
+
+  testWidgets('đăng nhập bằng tài khoản gửi username, mật khẩu và giữ token', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+
+    final posted = <String, dynamic>{};
+    final seenHeaders = <String>[];
+    final api = _api(
+      MockClient((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) {
+          posted.addAll(jsonDecode(request.body) as Map<String, dynamic>);
+          return _json({
+            'token': 'phien-moi',
+            'expiresAt': '2026-10-23T20:00:00.000Z',
+            'user': _sessionUser(
+              role: 'FACILITY',
+              username: 'tule.phutrach',
+              fullName: 'Trần Văn Phụ Trách',
+              facilityId: 1,
+              facilityName: 'Cơ sở Tú Lệ Smart Breakfast',
+            ),
+          });
+        }
+        seenHeaders.add(request.headers['Authorization'] ?? '');
+        return _json(const {'items': [], 'total': 0, 'page': 1, 'pages': 1});
+      }),
+    );
+
+    await tester.pumpWidget(_adminApp(api));
+    await _settle(tester);
+
+    await tester.enterText(find.byType(TextField).first, 'tule.phutrach');
+    await tester.enterText(find.byType(TextField).last, 'matkhau2026');
+    await tester.tap(find.text('Vào Management'));
+    await _settle(tester);
+
+    expect(posted['username'], 'tule.phutrach');
+    expect(posted['password'], 'matkhau2026');
+    // Token của phiên phải đi kèm mọi gọi tiếp theo.
+    expect(seenHeaders, isNotEmpty);
+    expect(seenHeaders.every((value) => value == 'Bearer phien-moi'), isTrue);
+    // Và tên người đăng nhập hiện trên thanh trên.
+    expect(find.textContaining('Trần Văn Phụ Trách'), findsOneWidget);
+  });
+
+  testWidgets('lỗi thiếu quyền chỉ báo một dòng, không đẩy ra đăng nhập', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'tule_admin_token': 'phien-staff'});
+
+    final api = _api(
+      MockClient((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/admin/session')) {
+          return _json({
+            'ok': true,
+            'user': _sessionUser(
+              role: 'STAFF',
+              username: 'lan.say',
+              fullName: 'Nguyễn Thị Lan',
+              facilityId: 1,
+              facilityName: 'Cơ sở Tú Lệ Smart Breakfast',
+            ),
+          });
+        }
+        // Mọi thứ khác bị từ chối vì thiếu quyền.
+        return _json({
+          'error': 'FORBIDDEN',
+          'message': 'Vai trò nhân viên công đoạn không được làm việc này.',
+        }, status: 403);
+      }),
+    );
+
+    await tester.pumpWidget(_adminApp(api));
+    await _settle(tester);
+
+    // 403 không được hiểu là hết phiên: người dùng vẫn ở trong Management.
+    expect(find.text('Đăng nhập quản trị'), findsNothing);
+    expect(find.text('Tổng quan'), findsWidgets);
   });
 }

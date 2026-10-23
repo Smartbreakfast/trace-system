@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import * as auth from './auth';
 import { ApiError, badRequest } from './errors';
 import {
   allowedContentTypes,
@@ -32,38 +33,52 @@ import {
 
 export type { Env } from './env';
 
-const app = new Hono<{ Bindings: Env }>();
+type Variables = { auth: auth.Auth };
 
-/** So sánh token theo thời gian hằng số để không lộ thông tin qua độ trễ. */
-function tokenMatches(given: string, expected: string) {
-  if (given.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < given.length; i += 1) {
-    diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+/** Bearer token của request, rỗng khi không có header. */
+function bearer(c: { req: { header: (name: string) => string | undefined } }) {
+  const header = c.req.header('authorization') ?? '';
+  return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
 /**
- * Trước đây toàn bộ /api/admin/* mở cho cả internet. Chấp nhận được khi chỉ
- * chạy localhost, nhưng lên Cloudflare thì bất kỳ ai cũng công bố lô giả và
- * đổ file vào R2 của bạn được.
+ * Trước đây toàn bộ /api/admin/* mở cho cả internet. Rồi đóng bằng một
+ * ADMIN_TOKEN dùng chung: chặn được người ngoài, nhưng mọi thao tác đều ký tên
+ * "admin" nên nhật ký không nói được ai làm gì.
+ *
+ * Giờ bearer token có thể là một trong hai thứ:
+ *   - token phiên của một tài khoản (đường thường dùng), hoặc
+ *   - ADMIN_TOKEN, cửa dự phòng cho script vận hành và cho lúc mất mật khẩu.
+ *
+ * Quyền của từng vai trò chốt ở `auth.permissions`; mỗi route dưới đây gọi
+ * `requirePermission` và, với dữ liệu của một cơ sở, gọi `assertFacility`.
  */
 app.use('/api/admin/*', async (c, next) => {
+  const given = bearer(c);
+  if (!given) {
+    throw new ApiError(401, 'UNAUTHORIZED', 'Thiếu token. Hãy đăng nhập lại.');
+  }
+
+  const session = await auth.sessionAuth(c.env.DB, given);
+  if (session) {
+    c.set('auth', session);
+    await next();
+    return;
+  }
+
   const expected = c.env.ADMIN_TOKEN;
-  if (!expected) {
-    throw new ApiError(
-      503,
-      'ADMIN_TOKEN_MISSING',
-      'Chưa cấu hình ADMIN_TOKEN. Chạy: wrangler secret put ADMIN_TOKEN',
-    );
+  if (expected && auth.tokenMatches(given, expected)) {
+    c.set('auth', auth.tokenAuth());
+    await next();
+    return;
   }
-  const header = c.req.header('authorization') ?? '';
-  const given = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!given || !tokenMatches(given, expected)) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'Token quản trị không đúng.');
-  }
-  await next();
+  throw new ApiError(
+    401,
+    'UNAUTHORIZED',
+    'Phiên đăng nhập đã hết hoặc token không đúng.',
+  );
 });
 
 app.onError((error, c) => {
@@ -212,19 +227,160 @@ app.get('/api/media/*', (c) => {
   return serveMedia(c.env.MEDIA, key, c.req.raw);
 });
 
+// ------------------------------------------------------------------ đăng nhập
+//
+// Nằm ngoài /api/admin/* vì lúc đăng nhập thì chưa có token nào để mà kiểm.
+
+app.post('/api/auth/login', async (c) => {
+  const body = await jsonBody(c.req.raw);
+  const result = await auth.login(
+    c.env.DB,
+    str(body, 'username', 'tên đăng nhập', { min: 3, max: 40 }),
+    str(body, 'password', 'mật khẩu', { min: 1, max: 200 }),
+  );
+  await auth.writeAudit(c.env.DB, result.auth, 'LOGIN', result.auth.username);
+  return c.json({
+    token: result.token,
+    expiresAt: result.expiresAt,
+    user: publicAuth(result.auth),
+  });
+});
+
+app.post('/api/auth/logout', async (c) => {
+  const token = bearer(c);
+  if (token) await auth.logout(c.env.DB, token);
+  return c.json({ ok: true });
+});
+
 // -------------------------------------------------------------------- admin
 
-app.get('/api/admin/session', (c) => c.json({ ok: true, role: 'admin' }));
+/// Màn quản trị gọi đường này ngay khi mở để biết mình là ai và được làm gì.
+app.get('/api/admin/session', (c) =>
+  c.json({ ok: true, user: publicAuth(c.get('auth')) }),
+);
 
-app.get('/api/admin/summary', async (c) => c.json(await trace.summary(c.env.DB)));
+app.get('/api/admin/summary', async (c) => {
+  const me = c.get('auth');
+  return c.json(await trace.summary(c.env.DB, scopeOf(me)));
+});
+
+/// Danh sách cơ sở, để màn quản trị hiện tên cơ sở và gán tài khoản.
+app.get('/api/admin/facilities', async (c) =>
+  c.json(await auth.listFacilities(c.env.DB)),
+);
+
+// ------------------------------------------------------------------ tài khoản
+
+app.get('/api/admin/users', async (c) => {
+  auth.requirePermission(c.get('auth'), 'manageUsers');
+  return c.json(await auth.listUsers(c.env.DB));
+});
+
+app.post('/api/admin/users', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageUsers');
+  const body = await jsonBody(c.req.raw);
+  const created = await auth.createUser(c.env.DB, {
+    username: str(body, 'username', 'tên đăng nhập', { max: 40 }),
+    password: str(body, 'password', 'mật khẩu', { max: 200 }),
+    fullName: str(body, 'fullName', 'họ tên', { optional: true, max: 120 }),
+    role: oneOf(body.role, auth.roles, 'vai trò'),
+    facilityId: optionalInt(body, 'facilityId', 'cơ sở') ?? null,
+  });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'CREATE_USER',
+    String(created.username),
+    `vai trò ${created.role}`,
+  );
+  return c.json(created, 201);
+});
+
+app.patch('/api/admin/users/:id', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageUsers');
+  const id = pathInt(c.req.param('id'), 'id tài khoản');
+  const body = await jsonBody(c.req.raw);
+
+  const role =
+    body.role === undefined ? undefined : oneOf(body.role, auth.roles, 'vai trò');
+  const active = body.active === undefined ? undefined : Boolean(body.active);
+
+  const updated = await auth.updateUser(c.env.DB, id, {
+    fullName:
+      body.fullName === undefined
+        ? undefined
+        : str(body, 'fullName', 'họ tên', { optional: true, max: 120 }),
+    password:
+      body.password === undefined
+        ? undefined
+        : str(body, 'password', 'mật khẩu', { max: 200 }),
+    active,
+    role,
+    facilityId:
+      body.facilityId === undefined
+        ? undefined
+        : (optionalInt(body, 'facilityId', 'cơ sở') ?? null),
+  });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'UPDATE_USER',
+    updated.username,
+    [
+      body.password !== undefined ? 'đổi mật khẩu' : '',
+      active === undefined ? '' : active ? 'mở lại' : 'khoá',
+      role === undefined ? '' : `vai trò ${role}`,
+    ]
+      .filter(Boolean)
+      .join(', '),
+  );
+  return c.json(updated);
+});
+
+/// Đổi mật khẩu của chính mình. Mọi vai trò đều được, và phải nhập mật khẩu cũ.
+app.post('/api/admin/users/me/password', async (c) => {
+  const me = c.get('auth');
+  if (me.userId === null) {
+    throw badRequest('Đang vào bằng token quản trị, không có mật khẩu để đổi.');
+  }
+  const body = await jsonBody(c.req.raw);
+  await auth.login(
+    c.env.DB,
+    me.username,
+    str(body, 'currentPassword', 'mật khẩu hiện tại', { max: 200 }),
+  );
+  await auth.updateUser(c.env.DB, me.userId, {
+    password: str(body, 'newPassword', 'mật khẩu mới', { max: 200 }),
+  });
+  await auth.writeAudit(c.env.DB, me, 'CHANGE_PASSWORD', me.username);
+  return c.json({ ok: true });
+});
+
+// -------------------------------------------------------------------- nhật ký
+
+app.get('/api/admin/audit', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'viewAudit');
+  return c.json(
+    await auth.auditLog(c.env.DB, {
+      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      target: c.req.query('target'),
+      facilityId: scopeOf(me),
+    }),
+  );
+});
 
 /// Tổng hợp đánh giá theo lô và theo nguồn, để biết bao nhiêu phiếu là thật.
-app.get('/api/admin/ratings', async (c) =>
-  c.json(await trace.ratingReport(c.env.DB)),
-);
+app.get('/api/admin/ratings', async (c) => {
+  auth.requirePermission(c.get('auth'), 'manageRatings');
+  return c.json(await trace.ratingReport(c.env.DB));
+});
 
 /// Nhập một đánh giá từ phiếu khảo sát giấy, hoặc gieo dữ liệu dựng sẵn.
 app.post('/api/admin/ratings', async (c) => {
+  auth.requirePermission(c.get('auth'), 'manageRatings');
   const body = await jsonBody(c.req.raw);
   const stars = int(body, 'stars', 'số sao');
   if (stars > 5) throw badRequest('Số sao phải từ 1 đến 5.');
@@ -245,23 +401,24 @@ app.post('/api/admin/ratings', async (c) => {
 });
 
 /// Xoá cả một nguồn, dùng khi thay dữ liệu dựng sẵn bằng số liệu thật.
-app.delete('/api/admin/ratings/:source', async (c) =>
-  c.json(
-    await trace.deleteRatings(
-      c.env.DB,
-      oneOf(c.req.param('source'), trace.ratingSources, 'nguồn đánh giá'),
-    ),
-  ),
-);
+app.delete('/api/admin/ratings/:source', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageRatings');
+  const source = oneOf(c.req.param('source'), trace.ratingSources, 'nguồn đánh giá');
+  const result = await trace.deleteRatings(c.env.DB, source);
+  await auth.writeAudit(c.env.DB, me, 'DELETE_RATINGS', source);
+  return c.json(result);
+});
 
 app.get('/api/admin/products', async (c) =>
-  c.json(await trace.listProducts(c.env.DB)),
+  c.json(await trace.listProducts(c.env.DB, scopeOf(c.get('auth')))),
 );
 
 app.post('/api/admin/products', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageCatalog');
   const body = await jsonBody(c.req.raw);
-  return c.json(
-    await trace.createCatalogProduct(c.env.DB, {
+  const created = await trace.createCatalogProduct(c.env.DB, {
       sku: str(body, 'sku', 'mã sản phẩm', { max: 80 }),
       name: str(body, 'name', 'tên sản phẩm', { min: 2, max: 160 }),
       description: str(body, 'description', 'mô tả', { optional: true }),
@@ -271,9 +428,16 @@ app.post('/api/admin/products', async (c) => {
         'template',
         '',
       ),
-    }),
-    201,
+      facilityId: optionalInt(body, 'facilityId', 'cơ sở') ?? null,
+  });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'CREATE_PRODUCT',
+    String(created?.sku ?? ''),
+    String(created?.name ?? ''),
   );
+  return c.json(created, 201);
 });
 
 app.get('/api/admin/product-batches', async (c) => {
@@ -285,18 +449,26 @@ app.get('/api/admin/product-batches', async (c) => {
       sort: query.sort,
       page: query.page ? Number(query.page) : undefined,
       limit: query.limit ? Number(query.limit) : undefined,
+      facilityId: scopeOf(c.get('auth')),
     }),
   );
 });
 
-app.get('/api/admin/product-batches/:code/snapshots', async (c) =>
-  c.json(await trace.snapshots(c.env.DB, c.req.param('code'))),
-);
+app.get('/api/admin/product-batches/:code/snapshots', async (c) => {
+  const code = c.req.param('code');
+  await assertBatchScope(c, code);
+  return c.json(await trace.snapshots(c.env.DB, code));
+});
 
 app.post('/api/admin/product-batches', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageBatch');
   const body = await jsonBody(c.req.raw);
+  const productId = int(body, 'productId', 'sản phẩm');
+  // Lô mới phải thuộc một sản phẩm của chính cơ sở mình.
+  auth.assertFacility(me, await auth.facilityOfProduct(c.env.DB, productId));
   const created = await trace.createProduct(c.env.DB, {
-    productId: int(body, 'productId', 'sản phẩm'),
+    productId,
     name: str(body, 'name', 'tên sản phẩm', { min: 2, max: 160 }),
     code: str(body, 'code', 'mã lô', { min: 4, max: 64 }),
     productionDate: str(body, 'productionDate', 'ngày sản xuất', { max: 40 }),
@@ -309,12 +481,23 @@ app.post('/api/admin/product-batches', async (c) => {
     latitude: coord(body, 'latitude', 'vĩ độ nơi sản xuất', 90),
     longitude: coord(body, 'longitude', 'kinh độ nơi sản xuất', 180),
   });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'CREATE_BATCH',
+    String(created?.code ?? ''),
+    String(created?.name ?? ''),
+  );
   return c.json(created, 201);
 });
 
 app.patch('/api/admin/product-batches/:code', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageBatch');
+  const code = c.req.param('code');
+  await assertBatchScope(c, code);
   const body = await jsonBody(c.req.raw);
-  const updated = await trace.updateProduct(c.env.DB, c.req.param('code'), {
+  const updated = await trace.updateProduct(c.env.DB, code, {
     name: optional(body, 'name', 'tên sản phẩm', 160),
     productionDate: optional(body, 'productionDate', 'ngày sản xuất', 40),
     expiryDate: optional(body, 'expiryDate', 'hạn sử dụng', 40),
@@ -323,59 +506,83 @@ app.patch('/api/admin/product-batches/:code', async (c) => {
     latitude: coord(body, 'latitude', 'vĩ độ nơi sản xuất', 90),
     longitude: coord(body, 'longitude', 'kinh độ nơi sản xuất', 180),
   });
+  await auth.writeAudit(c.env.DB, me, 'UPDATE_BATCH', code);
   return c.json(updated);
 });
 
-app.delete('/api/admin/ingredient-batches/:id', async (c) =>
-  c.json(
-    await trace.deleteIngredient(
-      c.env.DB,
-      pathInt(c.req.param('id'), 'id nguyên liệu'),
-    ),
-  ),
-);
+app.delete('/api/admin/ingredient-batches/:id', async (c) => {
+  const me = c.get('auth');
+  // Xoá cả một nguyên liệu kèm công đoạn của nó là việc của người phụ trách,
+  // không phải của nhân viên công đoạn.
+  auth.requirePermission(me, 'manageBatch');
+  const id = pathInt(c.req.param('id'), 'id nguyên liệu');
+  auth.assertFacility(me, await auth.facilityOfIngredient(c.env.DB, id));
+  const result = await trace.deleteIngredient(c.env.DB, id);
+  await auth.writeAudit(c.env.DB, me, 'DELETE_INGREDIENT', String(id));
+  return c.json(result);
+});
 
 /// Hồ sơ đầy đủ theo dữ liệu đang có, dành cho màn quản trị. Trang khách đọc
 /// bản đã công bố, nên người vận hành phải có đường riêng để thấy thứ mình vừa
 /// sửa.
-app.get('/api/admin/product-batches/:code/trace', async (c) =>
-  c.json(await trace.adminTrace(c.env.DB, c.req.param('code'), c.env)),
-);
+app.get('/api/admin/product-batches/:code/trace', async (c) => {
+  const code = c.req.param('code');
+  await assertBatchScope(c, code);
+  return c.json(await trace.adminTrace(c.env.DB, code, c.env));
+});
 
-app.get('/api/admin/product-batches/:code/snapshots/:version', async (c) =>
-  c.json(
+app.get('/api/admin/product-batches/:code/snapshots/:version', async (c) => {
+  const code = c.req.param('code');
+  await assertBatchScope(c, code);
+  return c.json(
     await trace.snapshotContent(
       c.env.DB,
-      c.req.param('code'),
+      code,
       pathInt(c.req.param('version'), 'phiên bản'),
     ),
-  ),
-);
+  );
+});
 
-app.get('/api/admin/chain', async (c) =>
-  c.json({
+app.get('/api/admin/chain', async (c) => {
+  auth.requirePermission(c.get('auth'), 'viewChain');
+  return c.json({
     ...(await chainStatus(c.env)),
     outbox: await trace.outboxSummary(c.env.DB),
-  }),
-);
+  });
+});
 
 /// Gửi ngay những bản còn nằm trong hàng chờ. Dùng khi mạng vừa sập lúc công
 /// bố, hoặc khi vừa sửa xong cấu hình chuỗi.
-app.post('/api/admin/chain/send', async (c) =>
-  c.json(await trace.drainOutbox(c.env, 10, true)),
-);
+app.post('/api/admin/chain/send', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageChain');
+  const result = await trace.drainOutbox(c.env, 10, true);
+  await auth.writeAudit(c.env.DB, me, 'CHAIN_SEND', '', `gửi ${result.sent}`);
+  return c.json(result);
+});
 
-app.post('/api/admin/chain/retry', async (c) =>
-  c.json(await trace.retryOutbox(c.env.DB)),
-);
+app.post('/api/admin/chain/retry', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageChain');
+  const result = await trace.retryOutbox(c.env.DB);
+  await auth.writeAudit(c.env.DB, me, 'CHAIN_RETRY', '');
+  return c.json(result);
+});
 
 app.post('/api/admin/product-batches/:code/publish', async (c) => {
-  const body = await safeJson(c.req.raw);
-  const result = await trace.publish(
+  const me = c.get('auth');
+  auth.requirePermission(me, 'publish');
+  const code = c.req.param('code');
+  await assertBatchScope(c, code);
+  // Tên người công bố lấy từ phiên đăng nhập, không nhận từ body: để client tự
+  // khai tên thì dòng "công bố bởi" trong hồ sơ không còn là bằng chứng gì cả.
+  const result = await trace.publish(c.env.DB, code, me.username);
+  await auth.writeAudit(
     c.env.DB,
-    c.req.param('code'),
-    str(body, 'enteredBy', 'người công bố', { optional: true, max: 80 }) ||
-      'admin',
+    me,
+    'PUBLISH',
+    code,
+    `bản ${result.version}, mã băm ${result.sha256.slice(0, 12)}`,
   );
   // Gửi lên chuỗi ngay sau khi chốt, nhưng không bắt người vận hành đứng chờ
   // giao dịch: `waitUntil` cho worker chạy tiếp sau khi đã trả lời.
@@ -388,9 +595,13 @@ app.post('/api/admin/product-batches/:code/publish', async (c) => {
 });
 
 app.post('/api/admin/ingredient-batches', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageBatch');
   const body = await jsonBody(c.req.raw);
+  const productBatchId = int(body, 'productBatchId', 'lô thành phẩm');
+  auth.assertFacility(me, await auth.facilityOfBatch(c.env.DB, productBatchId));
   const created = await trace.createIngredient(c.env.DB, {
-    productBatchId: int(body, 'productBatchId', 'lô thành phẩm'),
+    productBatchId,
     name: str(body, 'name', 'tên nguyên liệu', { max: 160 }),
     origin: str(body, 'origin', 'vùng nguyên liệu', { max: 200 }),
     supplier: str(body, 'supplier', 'nhà cung cấp', { optional: true, max: 200 }),
@@ -408,14 +619,25 @@ app.post('/api/admin/ingredient-batches', async (c) => {
     longitude: coord(body, 'longitude', 'kinh độ vùng nguyên liệu', 180),
     areaGeoJson: normalizeArea(body.areaGeoJson),
   });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'CREATE_INGREDIENT',
+    String(created?.id ?? ''),
+    String(created?.name ?? ''),
+  );
   return c.json(created, 201);
 });
 
 app.patch('/api/admin/ingredient-batches/:id', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageBatch');
+  const ingredientId = pathInt(c.req.param('id'), 'id nguyên liệu');
+  auth.assertFacility(me, await auth.facilityOfIngredient(c.env.DB, ingredientId));
   const body = await jsonBody(c.req.raw);
   const updated = await trace.updateIngredient(
     c.env.DB,
-    pathInt(c.req.param('id'), 'id nguyên liệu'),
+    ingredientId,
     {
       name: optional(body, 'name', 'tên nguyên liệu', 160),
       origin: optional(body, 'origin', 'vùng nguyên liệu', 200),
@@ -429,19 +651,40 @@ app.patch('/api/admin/ingredient-batches/:id', async (c) => {
       sourceProductBatchId: optionalInt(body, 'sourceProductBatchId', 'batch nguyên liệu nguồn'),
     },
   );
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'UPDATE_INGREDIENT',
+    String(ingredientId),
+  );
   return c.json(updated);
 });
 
 app.post('/api/admin/process-events', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageEvent');
   const body = await jsonBody(c.req.raw);
+  // Một trong hai: công đoạn của nguyên liệu, hoặc công đoạn ở xưởng.
+  const ingredientBatchId = optionalInt(body, 'ingredientBatchId', 'lô nguyên liệu');
+  const productBatchId = optionalInt(body, 'productBatchId', 'lô sản phẩm');
+  if (ingredientBatchId != null) {
+    auth.assertFacility(
+      me,
+      await auth.facilityOfIngredient(c.env.DB, ingredientBatchId),
+    );
+  }
+  if (productBatchId != null) {
+    auth.assertFacility(me, await auth.facilityOfBatch(c.env.DB, productBatchId));
+  }
   const created = await trace.createEvent(c.env.DB, {
-    // Một trong hai: công đoạn của nguyên liệu, hoặc công đoạn ở xưởng.
-    ingredientBatchId: optionalInt(body, 'ingredientBatchId', 'lô nguyên liệu'),
-    productBatchId: optionalInt(body, 'productBatchId', 'lô sản phẩm'),
+    ingredientBatchId,
+    productBatchId,
     title: str(body, 'title', 'tên công đoạn', { max: 200 }),
     description: str(body, 'description', 'ghi chú', { optional: true }),
     eventDate: str(body, 'eventDate', 'ngày thực hiện', { max: 40 }),
-    enteredBy: str(body, 'enteredBy', 'người nhập', { optional: true, max: 80 }),
+    // Người nhập là người đang đăng nhập. Đây là chỗ câu "mỗi người tự khai
+    // báo" thành có thật: không ai khai hộ dưới tên người khác được.
+    enteredBy: me.username,
     position: optionalIndex(body, 'position', 'thứ tự công đoạn'),
     operator: optionalText(body, 'operator', 'người thực hiện', 120),
     inputQuantity: optionalAmount(body, 'inputQuantity', 'khối lượng vào'),
@@ -449,14 +692,25 @@ app.post('/api/admin/process-events', async (c) => {
     quantityUnit: optionalText(body, 'quantityUnit', 'đơn vị khối lượng', 16),
     params: optionalParams(body, 'params', 'tham số công đoạn'),
   });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'CREATE_EVENT',
+    String(created?.id ?? ''),
+    String(created?.title ?? ''),
+  );
   return c.json(created, 201);
 });
 
 app.patch('/api/admin/process-events/:id', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageEvent');
+  const eventId = pathInt(c.req.param('id'), 'id công đoạn');
+  auth.assertFacility(me, await auth.facilityOfEvent(c.env.DB, eventId));
   const body = await jsonBody(c.req.raw);
   const updated = await trace.updateEvent(
     c.env.DB,
-    pathInt(c.req.param('id'), 'id công đoạn'),
+    eventId,
     {
       title: str(body, 'title', 'tên công đoạn', { optional: true, max: 200 }),
       description: str(body, 'description', 'ghi chú', { optional: true }),
@@ -472,14 +726,21 @@ app.patch('/api/admin/process-events/:id', async (c) => {
       params: optionalParams(body, 'params', 'tham số công đoạn'),
     },
   );
+  await auth.writeAudit(c.env.DB, me, 'UPDATE_EVENT', String(eventId));
   return c.json(updated);
 });
 
-app.delete('/api/admin/process-events/:id', async (c) =>
-  c.json(
-    await trace.deleteEvent(c.env.DB, pathInt(c.req.param('id'), 'id công đoạn')),
-  ),
-);
+app.delete('/api/admin/process-events/:id', async (c) => {
+  const me = c.get('auth');
+  // Nhân viên khai thêm và sửa được, nhưng xoá một công đoạn khỏi lịch sử là
+  // việc của người phụ trách cơ sở.
+  auth.requirePermission(me, 'manageBatch');
+  const eventId = pathInt(c.req.param('id'), 'id công đoạn');
+  auth.assertFacility(me, await auth.facilityOfEvent(c.env.DB, eventId));
+  const result = await trace.deleteEvent(c.env.DB, eventId);
+  await auth.writeAudit(c.env.DB, me, 'DELETE_EVENT', String(eventId));
+  return c.json(result);
+});
 
 app.get('/api/admin/media/config', (c) =>
   c.json({
@@ -508,7 +769,11 @@ app.post('/api/admin/media', async (c) => {
   if (!Number.isInteger(ownerId) || ownerId <= 0) {
     throw new ApiError(400, 'VALIDATION_FAILED', 'Thiếu ownerId hợp lệ.');
   }
-  await assertOwnerExists(c.env.DB, ownerType, ownerId);
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageMedia');
+  // facilityOfOwner cũng trả 404 khi không có đối tượng, nên không cần kiểm
+  // tồn tại thêm một lần nữa.
+  auth.assertFacility(me, await auth.facilityOfOwner(c.env.DB, ownerType, ownerId));
 
   const stored = await storeUpload(c.env.DB, c.env.MEDIA, {
     file,
@@ -521,23 +786,79 @@ app.post('/api/admin/media', async (c) => {
     certNumber: String(form.get('certNumber') ?? '').slice(0, 80) || null,
     validUntil: String(form.get('validUntil') ?? '').slice(0, 40) || null,
   });
+  await auth.writeAudit(
+    c.env.DB,
+    me,
+    'UPLOAD_MEDIA',
+    `${ownerType}:${ownerId}`,
+    String((stored as Record<string, unknown>)?.fileName ?? ''),
+  );
   return c.json(stored, 201);
 });
 
-app.delete('/api/admin/media/:id', async (c) =>
-  c.json(
-    await deleteMedia(
-      c.env.DB,
-      c.env.MEDIA,
-      pathInt(c.req.param('id'), 'id media'),
-    ),
-  ),
-);
+app.delete('/api/admin/media/:id', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageMedia');
+  const id = pathInt(c.req.param('id'), 'id media');
+  const owner = await c.env.DB.prepare(
+    'SELECT owner_type as ownerType, owner_id as ownerId FROM media_assets WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ ownerType: string; ownerId: number }>();
+  if (!owner) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy media.');
+  auth.assertFacility(
+    me,
+    await auth.facilityOfOwner(c.env.DB, owner.ownerType, Number(owner.ownerId)),
+  );
+  const result = await deleteMedia(c.env.DB, c.env.MEDIA, id);
+  await auth.writeAudit(c.env.DB, me, 'DELETE_MEDIA', String(id));
+  return c.json(result);
+});
 
 // Mọi đường dẫn còn lại là của ứng dụng Flutter (SPA fallback do assets lo).
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 // ------------------------------------------------------------------ helpers
+
+/** Hồ sơ người đang đăng nhập, kèm bảng quyền để giao diện khỏi đoán. */
+function publicAuth(me: auth.Auth) {
+  return {
+    username: me.username,
+    fullName: me.fullName,
+    role: me.role,
+    roleLabel: auth.roleLabel(me.role),
+    facilityId: me.facilityId,
+    facilityName: me.facilityName,
+    viaToken: me.viaToken,
+    permissions: auth.permissions[me.role],
+  };
+}
+
+/**
+ * Phạm vi dữ liệu của một người: null là mọi cơ sở, số là một cơ sở. Tài khoản
+ * không phải quản trị mà chưa gán cơ sở thì không được thấy gì, chứ không phải
+ * được thấy tất cả.
+ */
+function scopeOf(me: auth.Auth) {
+  if (auth.can(me, 'allFacilities')) return null;
+  if (me.facilityId === null) {
+    throw new ApiError(
+      403,
+      'FORBIDDEN',
+      'Tài khoản chưa được gán cơ sở, không truy cập được dữ liệu nào.',
+    );
+  }
+  return me.facilityId;
+}
+
+async function assertBatchScope(
+  c: { env: Env; get: (key: 'auth') => auth.Auth },
+  code: string,
+) {
+  const me = c.get('auth');
+  if (auth.can(me, 'allFacilities')) return;
+  auth.assertFacility(me, await auth.facilityOfBatchCode(c.env.DB, code));
+}
 
 function maxUpload(env: Env) {
   const parsed = Number(env.MAX_UPLOAD_BYTES);
@@ -564,31 +885,6 @@ async function safeJson(request: Request): Promise<Record<string, unknown>> {
       : {};
   } catch {
     return {};
-  }
-}
-
-const ownerTables: Record<string, string> = {
-  product_batch: 'product_batches',
-  ingredient_batch: 'ingredient_batches',
-  process_event: 'process_events',
-};
-
-async function assertOwnerExists(
-  db: D1Database,
-  ownerType: string,
-  ownerId: number,
-) {
-  const table = ownerTables[ownerType];
-  const row = await db
-    .prepare(`SELECT id FROM ${table} WHERE id = ?`)
-    .bind(ownerId)
-    .first();
-  if (!row) {
-    throw new ApiError(
-      404,
-      'OWNER_NOT_FOUND',
-      'Không tìm thấy đối tượng để gắn media.',
-    );
   }
 }
 

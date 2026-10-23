@@ -11,17 +11,29 @@ import 'shared_components.dart';
 /// Chỉ còn hai mục. Trước đây "Lô sản phẩm", "Nguyên liệu" và "Tính toàn vẹn"
 /// là ba tab tách rời, nên tạo một lô phải chạy qua lại giữa chúng và mỗi tab
 /// lại có một cách nhập khác nhau cho cùng một thứ.
-enum AdminSection { overview, batches }
+enum AdminSection { overview, batches, accounts, audit }
 
 extension AdminSectionMeta on AdminSection {
   String get label => switch (this) {
     AdminSection.overview => 'Tổng quan',
     AdminSection.batches => 'Lô sản phẩm',
+    AdminSection.accounts => 'Tài khoản',
+    AdminSection.audit => 'Nhật ký',
   };
 
   IconData get icon => switch (this) {
     AdminSection.overview => Icons.grid_view_rounded,
     AdminSection.batches => Icons.inventory_2_outlined,
+    AdminSection.accounts => Icons.group_outlined,
+    AdminSection.audit => Icons.history,
+  };
+
+  /// Quyền cần có để thấy mục này; null là ai cũng thấy. Tên quyền trùng với
+  /// bảng quyền của worker, nên thêm vai trò mới không phải sửa ở đây.
+  String? get permission => switch (this) {
+    AdminSection.accounts => 'manageUsers',
+    AdminSection.audit => 'viewAudit',
+    _ => null,
   };
 }
 
@@ -32,8 +44,16 @@ class ManagementSidebar extends StatelessWidget {
     required this.section,
     required this.onSelect,
     required this.onExplorer,
+    this.sections = AdminSection.values,
+    this.footer = 'ADMIN / TÚ LỆ LAB',
     super.key,
   });
+
+  /// Những mục người này được thấy. Vai trò nhân viên không có mục Tài khoản.
+  final List<AdminSection> sections;
+
+  /// Dòng dưới cùng: vai trò và cơ sở của người đang đăng nhập.
+  final String footer;
 
   final AdminSection section;
   final ValueChanged<AdminSection> onSelect;
@@ -64,7 +84,7 @@ class ManagementSidebar extends StatelessWidget {
             ),
           ),
         ),
-        for (final item in AdminSection.values)
+        for (final item in sections)
           WorkspaceLink(
             icon: item.icon,
             label: item.label,
@@ -72,12 +92,13 @@ class ManagementSidebar extends StatelessWidget {
             onTap: () => onSelect(item),
           ),
         const Spacer(),
-        const Text(
-          'ADMIN / TÚ LỆ LAB',
-          style: TextStyle(
+        Text(
+          footer,
+          style: const TextStyle(
             color: Colors.white54,
             fontSize: 11,
             letterSpacing: .7,
+            height: 1.5,
           ),
         ),
         const SizedBox(height: 10),

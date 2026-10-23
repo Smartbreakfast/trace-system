@@ -7,7 +7,15 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../models/trace_models.dart'
-    show BatchPage, BatchRef, ProductCatalog, PublicProduct, RatingSummary;
+    show
+        AdminAccount,
+        AdminUser,
+        AuditEntry,
+        BatchPage,
+        BatchRef,
+        ProductCatalog,
+        PublicProduct,
+        RatingSummary;
 
 /// Lỗi có ngữ cảnh để UI hiển thị đúng trạng thái thay vì một `Exception` chung.
 sealed class TraceApiFailure implements Exception {
@@ -31,9 +39,20 @@ class TraceUnreachable extends TraceApiFailure {
   ]);
 }
 
-/// Token quản trị sai hoặc chưa nhập.
+/// Chưa đăng nhập, phiên hết hạn, hoặc token sai. Gặp lỗi này là phải quay ra
+/// màn đăng nhập.
 class TraceUnauthorized extends TraceApiFailure {
-  const TraceUnauthorized([super.message = 'Token quản trị không đúng.']);
+  const TraceUnauthorized([
+    super.message = 'Phiên đăng nhập đã hết. Đăng nhập lại.',
+  ]);
+}
+
+/// Đăng nhập đúng nhưng vai trò không được làm việc này.
+///
+/// Phải khác hẳn [TraceUnauthorized]: đẩy người ta ra màn đăng nhập chỉ vì bấm
+/// vào một nút ngoài quyền là vừa khó hiểu vừa làm mất việc đang làm.
+class TraceForbidden extends TraceApiFailure {
+  const TraceForbidden([super.message = 'Vai trò của bạn không được làm việc này.']);
 }
 
 /// Backend trả lỗi nghiệp vụ, ví dụ trùng mã lô hay file sai định dạng.
@@ -119,9 +138,14 @@ class TraceApi {
       }
     }
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.statusCode == 401) {
       throw TraceUnauthorized(
-        _messageOf(body) ?? 'Token quản trị không đúng hoặc đã hết hạn.',
+        _messageOf(body) ?? 'Phiên đăng nhập đã hết. Đăng nhập lại.',
+      );
+    }
+    if (response.statusCode == 403) {
+      throw TraceForbidden(
+        _messageOf(body) ?? 'Vai trò của bạn không được làm việc này.',
       );
     }
     if (response.statusCode >= 400) {
@@ -208,12 +232,116 @@ class TraceApi {
 
   // ------------------------------------------------------------------ admin
 
-  /// Kiểm tra token trước khi mở Management, để báo sai ngay tại màn đăng nhập.
-  Future<bool> checkSession() async {
-    await _send(
+  /// Đăng nhập bằng tài khoản. Trả về người dùng và đặt luôn token phiên vào
+  /// client, nên sau lệnh này mọi gọi admin đều đã có thẩm quyền.
+  Future<AdminUser> login(String username, String password) async {
+    final data = await _send(
+      () => _client.post(
+        _uri('/auth/login'),
+        headers: _headers(json: true),
+        body: jsonEncode({'username': username, 'password': password}),
+      ),
+    );
+    if (data is! Map<String, dynamic>) {
+      throw const TraceUnreachable('Máy chủ trả về dữ liệu không hợp lệ.');
+    }
+    adminToken = '${data['token'] ?? ''}';
+    final user = data['user'];
+    if (adminToken!.isEmpty || user is! Map<String, dynamic>) {
+      throw const TraceUnreachable('Máy chủ không trả về phiên đăng nhập.');
+    }
+    return AdminUser.fromApi(user);
+  }
+
+  /// Xoá phiên ở máy chủ. Lỗi ở đây không được chặn việc đăng xuất tại máy:
+  /// token trong máy vẫn phải bị bỏ dù mạng có hỏng.
+  Future<void> logout() async {
+    try {
+      await _send(
+        () => _client.post(_uri('/auth/logout'), headers: _headers(admin: true)),
+      );
+    } on TraceApiFailure {
+      // Bỏ qua: phần quan trọng là xoá token ở client.
+    }
+  }
+
+  /// Hỏi worker xem token hiện tại là ai và được làm gì.
+  Future<AdminUser> checkSession() async {
+    final data = await _send(
       () => _client.get(_uri('/admin/session'), headers: _headers(admin: true)),
     );
-    return true;
+    final user = data is Map<String, dynamic> ? data['user'] : null;
+    if (user is! Map<String, dynamic>) {
+      throw const TraceUnreachable('Máy chủ không trả về thông tin tài khoản.');
+    }
+    return AdminUser.fromApi(user);
+  }
+
+  // ------------------------------------------------------- tài khoản, nhật ký
+
+  Future<List<Map<String, dynamic>>> listFacilities() async {
+    final data = await _send(
+      () =>
+          _client.get(_uri('/admin/facilities'), headers: _headers(admin: true)),
+    );
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map<String, dynamic>) item,
+    ];
+  }
+
+  Future<List<AdminAccount>> listUsers() async {
+    final data = await _send(
+      () => _client.get(_uri('/admin/users'), headers: _headers(admin: true)),
+    );
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map<String, dynamic>) AdminAccount.fromApi(item),
+    ];
+  }
+
+  Future<void> createUser({
+    required String username,
+    required String password,
+    required String fullName,
+    required String role,
+    int? facilityId,
+  }) => _write('POST', '/admin/users', {
+    'username': username,
+    'password': password,
+    'fullName': fullName,
+    'role': role,
+    'facilityId': facilityId,
+  });
+
+  Future<void> updateUser(Object id, Map<String, dynamic> body) =>
+      _write('PATCH', '/admin/users/$id', body);
+
+  Future<void> changeOwnPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => _write('POST', '/admin/users/me/password', {
+    'currentPassword': currentPassword,
+    'newPassword': newPassword,
+  });
+
+  Future<List<AuditEntry>> auditLog({int limit = 100, String? target}) async {
+    final data = await _send(
+      () => _client.get(
+        _uri('/admin/audit', {
+          'limit': '$limit',
+          if (target != null && target.isNotEmpty) 'target': target,
+        }),
+        headers: _headers(admin: true),
+      ),
+    );
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map<String, dynamic>) AuditEntry.fromApi(item),
+    ];
   }
 
   Future<Map<String, dynamic>> getSummary() async {
@@ -366,12 +494,10 @@ class TraceApi {
     return data is Map<String, dynamic> ? data : const {};
   }
 
-  Future<Map<String, dynamic>> publish(
-    String code, {
-    String enteredBy = 'admin',
-  }) => _write('POST', '/admin/product-batches/$code/publish', {
-    'enteredBy': enteredBy,
-  });
+  /// Công bố một lô. Không gửi tên người công bố: worker lấy từ phiên đăng
+  /// nhập, nên dòng "công bố bởi" trong hồ sơ là tên thật của người bấm nút.
+  Future<Map<String, dynamic>> publish(String code) =>
+      _write('POST', '/admin/product-batches/$code/publish');
 
   Future<Map<String, dynamic>> createProduct(Map<String, dynamic> body) =>
       _write('POST', '/admin/product-batches', body);
