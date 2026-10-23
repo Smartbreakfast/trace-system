@@ -346,7 +346,7 @@ app.post('/api/admin/users/me/password', async (c) => {
     throw badRequest('Đang vào bằng token quản trị, không có mật khẩu để đổi.');
   }
   const body = await jsonBody(c.req.raw);
-  await auth.login(
+  await auth.verifyCredentials(
     c.env.DB,
     me.username,
     str(body, 'currentPassword', 'mật khẩu hiện tại', { max: 200 }),
@@ -418,6 +418,10 @@ app.post('/api/admin/products', async (c) => {
   const me = c.get('auth');
   auth.requirePermission(me, 'manageCatalog');
   const body = await jsonBody(c.req.raw);
+  // Bắt buộc có cơ sở: lô thừa hưởng cơ sở từ sản phẩm, nên một mã sản phẩm
+  // không thuộc cơ sở nào sẽ đẻ ra những lô mà chỉ quản trị mở được.
+  const facilityId = int(body, 'facilityId', 'cơ sở sản xuất');
+  await auth.assertFacilityExists(c.env.DB, facilityId);
   const created = await trace.createCatalogProduct(c.env.DB, {
       sku: str(body, 'sku', 'mã sản phẩm', { max: 80 }),
       name: str(body, 'name', 'tên sản phẩm', { min: 2, max: 160 }),
@@ -428,7 +432,7 @@ app.post('/api/admin/products', async (c) => {
         'template',
         '',
       ),
-      facilityId: optionalInt(body, 'facilityId', 'cơ sở') ?? null,
+      facilityId,
   });
   await auth.writeAudit(
     c.env.DB,
@@ -798,7 +802,9 @@ app.post('/api/admin/media', async (c) => {
 
 app.delete('/api/admin/media/:id', async (c) => {
   const me = c.get('auth');
-  auth.requirePermission(me, 'manageMedia');
+  // Đính thêm ảnh là việc của nhân viên, nhưng gỡ một minh chứng khỏi hồ sơ
+  // thì không: cùng lý do với xoá công đoạn.
+  auth.requirePermission(me, 'manageBatch');
   const id = pathInt(c.req.param('id'), 'id media');
   const owner = await c.env.DB.prepare(
     'SELECT owner_type as ownerType, owner_id as ownerId FROM media_assets WHERE id = ?',
@@ -874,18 +880,6 @@ function optional(
   return body[field] === undefined
     ? undefined
     : str(body, field, label, { optional: true, max });
-}
-
-/** Publish có thể được gọi không kèm body, không nên vì thế mà thành 400. */
-async function safeJson(request: Request): Promise<Record<string, unknown>> {
-  try {
-    const parsed = await request.json();
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 /// Cron quét lại hàng chờ. Mạng có lúc chập, `waitUntil` lúc công bố có thể

@@ -376,12 +376,14 @@ class TraceApi {
     required String name,
     String description = '',
     String templateKey = '',
+    int? facilityId,
   }) async {
     final data = await _write('POST', '/admin/products', {
       'sku': sku,
       'name': name,
       'description': description,
       'templateKey': templateKey,
+      'facilityId': facilityId,
     });
     return data.isEmpty ? null : ProductCatalog.fromApi(data);
   }

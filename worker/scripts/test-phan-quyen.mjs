@@ -405,8 +405,91 @@ check(
   `status ${afterLock.status}`,
 );
 
+console.log('');
+console.log('8. Hãm số lần thử mật khẩu');
+
+// Tài khoản phụ trách Tú Lệ không còn phiên nào cần giữ, dùng nó làm chuột bạch.
+let lastWrong = { status: 0 };
+for (let attempt = 0; attempt < 5; attempt += 1) {
+  lastWrong = await call(null, 'POST', '/api/auth/login', {
+    username: accounts.phuTrachTule.username,
+    password: `sai-mat-khau-${attempt}`,
+  });
+}
+check(
+  'sai 5 lần liên tiếp thì khoá tạm',
+  lastWrong.status === 429,
+  `status ${lastWrong.status}`,
+);
+
+const rightButLocked = await call(null, 'POST', '/api/auth/login', {
+  username: accounts.phuTrachTule.username,
+  password: accounts.phuTrachTule.password,
+});
+check(
+  'đang khoá tạm thì mật khẩu đúng cũng chưa vào được',
+  rightButLocked.status === 429,
+  `status ${rightButLocked.status}`,
+);
+
+const lockedRow = (await call(TOKEN, 'GET', '/api/admin/users')).data.find(
+  (row) => row.username === accounts.phuTrachTule.username,
+);
+await call(TOKEN, 'PATCH', `/api/admin/users/${lockedRow.id}`, {
+  active: true,
+  password: 'matkhaumoi2026',
+});
+const afterReset = await call(null, 'POST', '/api/auth/login', {
+  username: accounts.phuTrachTule.username,
+  password: 'matkhaumoi2026',
+});
+check(
+  'quản trị đặt lại mật khẩu thì mở khoá luôn',
+  afterReset.status === 200,
+  `status ${afterReset.status}`,
+);
+
+console.log('');
+console.log('9. Danh mục sản phẩm phải thuộc một cơ sở');
+
+const orphan = await call(TOKEN, 'POST', '/api/admin/products', {
+  sku: `thu-khong-co-so-${stamp}`,
+  name: 'Sản phẩm không cơ sở',
+});
+check(
+  'không tạo được sản phẩm thiếu cơ sở',
+  orphan.status === 400,
+  `status ${orphan.status}`,
+);
+
+const badFacility = await call(TOKEN, 'POST', '/api/admin/products', {
+  sku: `thu-co-so-la-${stamp}`,
+  name: 'Sản phẩm cơ sở lạ',
+  facilityId: 99999,
+});
+check('không tạo được sản phẩm với cơ sở không có thật', badFacility.status === 400);
+
+console.log('');
+console.log('10. Nhật ký không rò sang cơ sở khác');
+
+const trauAudit = await call(
+  sessions.trauFacility,
+  'GET',
+  '/api/admin/audit?limit=200',
+);
+const trauRows = Array.isArray(trauAudit.data) ? trauAudit.data : [];
+check(
+  'phụ trách cơ sở này không thấy dòng nhật ký của cơ sở kia',
+  trauAudit.status === 200 &&
+    !trauRows.some(
+      (row) => row.target === CODE || row.username.startsWith('nv-tule'),
+    ),
+  `${trauRows.length} dòng`,
+);
+
+console.log('');
 // Dọn: khoá hai tài khoản thử còn lại để bản local không còn cửa mở.
-for (const account of [accounts.phuTrachTule, accounts.phuTrachTrau]) {
+for (const account of Object.values(accounts)) {
   const row = (await call(TOKEN, 'GET', '/api/admin/users')).data.find(
     (item) => item.username === account.username,
   );

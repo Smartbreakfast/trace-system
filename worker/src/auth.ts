@@ -42,6 +42,22 @@ const nowIso = () => new Date().toISOString();
 const SESSION_HOURS = 12;
 const PBKDF2_ROUNDS = 150_000;
 
+/** Sai mật khẩu 5 lần liên tiếp thì khoá tạm 15 phút, rồi tự mở lại. */
+const MAX_FAILED = 5;
+const LOCK_MINUTES = 15;
+
+/**
+ * Băm giả dùng khi không có tài khoản nào mang tên đó.
+ *
+ * Không có nó thì đường "không tìm thấy" trả lời nhanh hơn hẳn đường "sai mật
+ * khẩu", và người dò biết ngay tên đăng nhập nào có thật. Giá trị này là một
+ * chuỗi pbkdf2 hợp lệ với mật khẩu không ai đoán ra, nên verifyPassword chạy
+ * đúng một lần băm giống hệt đường thật.
+ */
+const DUMMY_HASH =
+  'pbkdf2$150000$Y2hhbmctYmFvLWdpby1kdW5n$' +
+  'n0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0E=';
+
 const encoder = new TextEncoder();
 
 function base64(bytes: Uint8Array) {
@@ -138,7 +154,33 @@ function sessionKey(token: string) {
   return sha256Hex(encoder.encode(token));
 }
 
-export async function login(
+/** Đang trong thời gian khoá tạm: nói rõ còn bao nhiêu phút. */
+function lockedError(lockedUntil: string, now: string) {
+  const minutes = Math.max(
+    1,
+    Math.ceil((Date.parse(lockedUntil) - Date.parse(now)) / 60000),
+  );
+  return new ApiError(
+    429,
+    'TOO_MANY_ATTEMPTS',
+    `Nhập sai quá nhiều lần. Thử lại sau ${minutes} phút.`,
+  );
+}
+
+const WRONG = new ApiError(
+  401,
+  'UNAUTHORIZED',
+  'Tên đăng nhập hoặc mật khẩu không đúng.',
+);
+
+/**
+ * Kiểm tên đăng nhập và mật khẩu, KHÔNG mở phiên.
+ *
+ * Tách khỏi `login` vì việc tự đổi mật khẩu cũng phải nhập mật khẩu cũ; gọi
+ * thẳng `login` ở đó sẽ đẻ ra một phiên không ai dùng và ghi sai mốc "đăng
+ * nhập lần cuối".
+ */
+export async function verifyCredentials(
   db: D1Database,
   username: string,
   password: string,
@@ -152,20 +194,48 @@ export async function login(
     .bind(username.trim().toLowerCase())
     .first<Row>();
 
-  // Vẫn băm một lần khi không có tài khoản: trả lời ngay lập tức là nói cho
-  // người dò biết tên đăng nhập nào có thật.
-  const stored = String(row?.password_hash ?? '');
-  const ok = stored
-    ? await verifyPassword(password, stored)
-    : await verifyPassword(password, await hashPassword('khong-co-tai-khoan'));
+  const now = nowIso();
+  const lockedUntil = String(row?.locked_until ?? '');
+  if (row && lockedUntil && lockedUntil > now) throw lockedError(lockedUntil, now);
+
+  const ok = await verifyPassword(
+    password,
+    String(row?.password_hash ?? '') || DUMMY_HASH,
+  );
 
   if (!row || !ok || Number(row.active) !== 1) {
-    throw new ApiError(
-      401,
-      'UNAUTHORIZED',
-      'Tên đăng nhập hoặc mật khẩu không đúng.',
-    );
+    if (row) {
+      // Đếm số lần sai liên tiếp; đủ ngưỡng thì khoá tạm.
+      const failed = Number(row.failed_attempts ?? 0) + 1;
+      const lock =
+        failed >= MAX_FAILED
+          ? new Date(Date.now() + LOCK_MINUTES * 60000).toISOString()
+          : null;
+      await db
+        .prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
+        .bind(lock ? 0 : failed, lock, row.id)
+        .run();
+      // Nói thẳng ngay ở lần khoá, đừng để người gõ nhầm thử tiếp rồi mới biết.
+      if (lock) throw lockedError(lock, now);
+    }
+    throw WRONG;
   }
+
+  if (Number(row.failed_attempts ?? 0) !== 0 || lockedUntil) {
+    await db
+      .prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?')
+      .bind(row.id)
+      .run();
+  }
+  return row;
+}
+
+export async function login(
+  db: D1Database,
+  username: string,
+  password: string,
+) {
+  const row = await verifyCredentials(db, username, password);
 
   const token = base64(crypto.getRandomValues(new Uint8Array(32)))
     .replace(/\+/g, '-')
@@ -483,10 +553,10 @@ export async function auditLog(
     conditions.push('a.target = ?');
     args.push(options.target);
   }
-  // Người phụ trách cơ sở chỉ xem được nhật ký của người cùng cơ sở mình, cộng
-  // các dòng do token quản trị ghi (không gắn tài khoản nào).
+  // Người phụ trách cơ sở chỉ xem nhật ký của người cùng cơ sở mình. Không
+  // kèm các dòng do token quản trị ghi: chúng có thể nhắc mã lô của cơ sở kia.
   if (options.facilityId !== undefined && options.facilityId !== null) {
-    conditions.push('(u.facility_id = ? OR a.user_id IS NULL)');
+    conditions.push('u.facility_id = ?');
     args.push(options.facilityId);
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -510,6 +580,15 @@ export async function listFacilities(db: D1Database) {
     .prepare('SELECT id, code, name FROM facilities ORDER BY id')
     .all<Row>();
   return result.results ?? [];
+}
+
+/** Cơ sở phải có thật trước khi gắn tài khoản hay sản phẩm vào. */
+export async function assertFacilityExists(db: D1Database, id: number) {
+  const row = await db
+    .prepare('SELECT id FROM facilities WHERE id = ?')
+    .bind(id)
+    .first<Row>();
+  if (!row) throw badRequest('Không có cơ sở với mã này.');
 }
 
 export async function listUsers(db: D1Database) {
@@ -537,15 +616,14 @@ export async function createUser(
 ) {
   const username = normalizeUsername(input.username);
   checkPasswordStrength(input.password);
+  // Quản trị hệ thống thấy mọi cơ sở, nên không gắn cơ sở nào: để lại một
+  // facility_id ở đó chỉ làm người đọc dữ liệu hiểu nhầm là họ bị giới hạn.
+  if (input.role === 'ADMIN') input.facilityId = null;
   if (input.role !== 'ADMIN' && input.facilityId === null) {
     throw badRequest('Vai trò này phải thuộc một cơ sở.');
   }
   if (input.facilityId !== null) {
-    const facility = await db
-      .prepare('SELECT id FROM facilities WHERE id = ?')
-      .bind(input.facilityId)
-      .first<Row>();
-    if (!facility) throw badRequest('Không có cơ sở với id này.');
+    await assertFacilityExists(db, input.facilityId);
   }
   const existing = await db
     .prepare('SELECT id FROM users WHERE username = ?')
@@ -589,56 +667,63 @@ export async function updateUser(
     .first<Row>();
   if (!user) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy tài khoản.');
 
-  const sets: string[] = [];
-  const args: unknown[] = [];
-  if (input.fullName !== undefined) {
-    sets.push('full_name = ?');
-    args.push(input.fullName.trim().slice(0, 120));
-  }
-  if (input.password !== undefined) {
-    checkPasswordStrength(input.password);
-    sets.push('password_hash = ?');
-    args.push(await hashPassword(input.password));
-  }
-  if (input.active !== undefined) {
-    sets.push('active = ?');
-    args.push(input.active ? 1 : 0);
-  }
-  if (input.role !== undefined) {
-    sets.push('role = ?');
-    args.push(input.role);
-  }
-  if (input.facilityId !== undefined) {
-    sets.push('facility_id = ?');
-    args.push(input.facilityId);
-  }
-  if (!sets.length) throw badRequest('Không có trường nào để sửa.');
-
   const role = input.role ?? (String(user.role) as Role);
-  // Khoá hoặc hạ quyền người quản trị cuối cùng là tự khoá mình ra ngoài. Chỉ
-  // kiểm khi đối tượng đang LÀ quản trị: trước đây kiểm cả khi khoá nhân viên,
-  // nên hệ thống chưa có tài khoản ADMIN nào (chỉ vào bằng token) thì không
-  // khoá được ai.
-  if (String(user.role) === 'ADMIN' && (input.active === false || role !== 'ADMIN')) {
-    await assertAdminRemains(db, id);
-  }
+  // Quản trị hệ thống không thuộc cơ sở nào (xem createUser).
   const facilityId =
-    input.facilityId !== undefined
-      ? input.facilityId
-      : user.facility_id === null
-        ? null
-        : Number(user.facility_id);
+    role === 'ADMIN'
+      ? null
+      : input.facilityId !== undefined
+        ? input.facilityId
+        : user.facility_id === null
+          ? null
+          : Number(user.facility_id);
   if (role !== 'ADMIN' && facilityId === null) {
     throw badRequest('Vai trò này phải thuộc một cơ sở.');
   }
 
+  // Khoá hoặc hạ quyền người quản trị cuối cùng là tự khoá mình ra ngoài. Chỉ
+  // kiểm khi đối tượng đang LÀ quản trị: kiểm cả lúc khoá nhân viên thì hệ
+  // thống chưa có tài khoản ADMIN nào (chỉ vào bằng token) sẽ không khoá được ai.
+  if (String(user.role) === 'ADMIN' && (input.active === false || role !== 'ADMIN')) {
+    await assertAdminRemains(db, id);
+  }
+
+  // Giữ câu lệnh và tham số đi cùng nhau trong một danh sách: tách thành hai
+  // mảng song song là kiểu lỗi chỉ lộ ra khi đã ghi nhầm cột.
+  const changes: [string, unknown][] = [];
+  if (input.fullName !== undefined) {
+    changes.push(['full_name = ?', input.fullName.trim().slice(0, 120)]);
+  }
+  if (input.password !== undefined) {
+    checkPasswordStrength(input.password);
+    changes.push(['password_hash = ?', await hashPassword(input.password)]);
+  }
+  if (input.active !== undefined) {
+    changes.push(['active = ?', input.active ? 1 : 0]);
+  }
+  if (input.role !== undefined) changes.push(['role = ?', role]);
+  if (input.facilityId !== undefined || (role === 'ADMIN' && user.facility_id !== null)) {
+    changes.push(['facility_id = ?', facilityId]);
+  }
+  if (!changes.length) throw badRequest('Không có trường nào để sửa.');
+
+  // Đặt lại mật khẩu hoặc mở lại tài khoản thì xoá luôn phần khoá tạm do nhập
+  // sai nhiều lần, không bắt người ta ngồi chờ hết 15 phút.
+  const extra =
+    input.password !== undefined || input.active === true
+      ? ', failed_attempts = 0, locked_until = NULL'
+      : '';
+
   await db
-    .prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
-    .bind(...args, id)
+    .prepare(
+      `UPDATE users SET ${changes.map(([sql]) => sql).join(', ')}${extra} WHERE id = ?`,
+    )
+    .bind(...changes.map(([, value]) => value), id)
     .run();
 
-  // Đổi mật khẩu, khoá tài khoản hay đổi vai trò phải đẩy người đó ra khỏi mọi
-  // phiên đang mở; nếu không thì phiên cũ chạy tiếp như chưa có gì xảy ra.
+  // Đổi mật khẩu, khoá tài khoản, đổi vai trò hay đổi cơ sở đều phải đẩy người
+  // đó ra khỏi mọi phiên đang mở; nếu không thì phiên cũ chạy tiếp như chưa có
+  // gì xảy ra, với quyền cũ.
   if (
     input.password !== undefined ||
     input.active === false ||

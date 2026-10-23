@@ -57,6 +57,9 @@ cũng được, không còn là bằng chứng. Tên người công bố lô cũ
   đó, không chờ hết hạn.
 - Sai mật khẩu và sai tên đăng nhập trả về cùng một câu trả lời, mất cùng một
   khoảng thời gian, để người dò không biết tên đăng nhập nào có thật.
+- Sai mật khẩu **5 lần liên tiếp** thì tài khoản bị khoá tạm 15 phút rồi tự mở
+  lại; quản trị đặt lại mật khẩu là mở khoá ngay. Việc này chặn kiểu dò mật
+  khẩu bằng máy, thứ mà một màn đăng nhập mở ra internet luôn phải tính đến.
 
 ## 5. Nhật ký thao tác
 
@@ -86,8 +89,10 @@ nhật ký được tách riêng: ghi thêm bao nhiêu cũng không động đ�
 | Xem nhật ký của hệ thống đang chạy | Đăng nhập màn quản trị, mục **Nhật ký** |
 | Xem tài khoản và cơ sở | Đăng nhập bằng tài khoản quản trị, mục **Tài khoản** |
 
-Kịch bản `test:phan-quyen` dựng ba tài khoản thử rồi kiểm 27 điều, trong đó có
-những điều quan trọng nhất là các điều **không** được phép: nhân viên không tạo
-được lô, không công bố được lô, không xem được nhật ký; người của cơ sở này
-không đọc, không sửa, không công bố được lô của cơ sở kia; tài khoản bị khoá
-thì phiên đang mở mất hiệu lực ngay. Chạy ngày 23/10/2026: 27/27 đúng.
+Kịch bản `test:phan-quyen` dựng ba tài khoản thử rồi kiểm 33 điều, trong đó
+quan trọng nhất là các điều **không** được phép: nhân viên không tạo được lô,
+không công bố được lô, không xem được nhật ký; người của cơ sở này không đọc,
+không sửa, không công bố được lô của cơ sở kia; tài khoản bị khoá thì phiên
+đang mở mất hiệu lực ngay; sai mật khẩu 5 lần thì bị khoá tạm; nhật ký của cơ
+sở này không lọt sang mắt người cơ sở kia. Chạy ngày 23/10/2026: **33/33
+đúng**.

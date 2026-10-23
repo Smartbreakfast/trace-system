@@ -287,6 +287,11 @@ Mật khẩu lưu dạng `pbkdf2$150000$<salt>$<hash>` (PBKDF2-SHA256, muối ri
 tài khoản). Phiên sống 12 giờ; bảng `sessions` chỉ giữ mã băm của token. Đổi mật
 khẩu, khoá tài khoản hoặc đổi vai trò đều xoá mọi phiên của người đó.
 
+Sai mật khẩu 5 lần liên tiếp thì `users.locked_until` khoá tài khoản 15 phút
+(migration 0014); đặt lại mật khẩu hoặc mở lại tài khoản xoá luôn phần khoá đó.
+Tên đăng nhập không tồn tại vẫn đi qua đúng một lần băm với một chuỗi giả, để
+thời gian trả lời của hai đường không chênh nhau.
+
 ## 5. Cơ chế toàn vẹn dữ liệu
 
 ### 5.1 Biểu diễn chuẩn hoá và mã băm
@@ -467,6 +472,7 @@ thêm theo cơ sở của người gọi.
 | 400 | Dữ liệu đầu vào không hợp lệ (thiếu trường, sai định dạng, vi phạm ràng buộc) |
 | 401 | Thiếu token, sai token, hoặc phiên đã hết hạn |
 | 403 | Đúng người nhưng sai quyền, hoặc dữ liệu thuộc cơ sở khác |
+| 429 | Nhập sai mật khẩu quá nhiều lần, tài khoản đang bị khoá tạm |
 | 404 | Không tìm thấy đối tượng |
 | 413 | Tệp vượt giới hạn dung lượng |
 | 415 | Định dạng tệp không được phép |

@@ -750,7 +750,22 @@ class _ManagementPageState extends State<ManagementPage> {
   );
 
   Future<void> _createCatalogProduct() async {
-    final result = await ProductCreateDialog.show(context);
+    // Danh sách cơ sở chỉ được nạp cùng màn Tài khoản; mở hộp thoại này ở
+    // trạng thái chưa nạp thì lấy ngay, nếu không người dùng không chọn được
+    // cơ sở và sản phẩm mới sẽ không thuộc về ai.
+    if (facilities.isEmpty) {
+      try {
+        final places = await api.listFacilities();
+        if (mounted) setState(() => facilities = places);
+      } on TraceApiFailure {
+        // Không lấy được thì hộp thoại vẫn mở, chỉ thiếu ô chọn cơ sở.
+      }
+    }
+    if (!mounted) return;
+    final result = await ProductCreateDialog.show(
+      context,
+      facilities: facilities,
+    );
     if (result == null) return;
     try {
       final created = await api.createCatalogProduct(
@@ -758,6 +773,7 @@ class _ManagementPageState extends State<ManagementPage> {
         name: result.name,
         description: result.description,
         templateKey: result.templateKey,
+        facilityId: result.facilityId,
       );
       if (created == null) throw const TraceRequestRejected('Không tạo được sản phẩm.');
       await _loadProducts();

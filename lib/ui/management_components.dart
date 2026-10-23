@@ -716,22 +716,31 @@ class ProductFormValues {
     required this.name,
     required this.description,
     required this.templateKey,
+    required this.facilityId,
   });
 
   final String sku;
   final String name;
   final String description;
   final String templateKey;
+
+  /// Cơ sở làm ra sản phẩm này. Lô thừa hưởng cơ sở từ đây, nên bỏ trống là
+  /// tạo một mã không ai ở cơ sở nào mở được.
+  final int? facilityId;
 }
 
 class ProductCreateDialog extends StatefulWidget {
-  const ProductCreateDialog({super.key});
+  const ProductCreateDialog({this.facilities = const [], super.key});
 
-  static Future<ProductFormValues?> show(BuildContext context) =>
-      showDialog<ProductFormValues>(
-        context: context,
-        builder: (_) => const ProductCreateDialog(),
-      );
+  final List<Map<String, dynamic>> facilities;
+
+  static Future<ProductFormValues?> show(
+    BuildContext context, {
+    List<Map<String, dynamic>> facilities = const [],
+  }) => showDialog<ProductFormValues>(
+    context: context,
+    builder: (_) => ProductCreateDialog(facilities: facilities),
+  );
 
   @override
   State<ProductCreateDialog> createState() => _ProductCreateDialogState();
@@ -743,6 +752,15 @@ class _ProductCreateDialogState extends State<ProductCreateDialog> {
   final name = TextEditingController();
   final description = TextEditingController();
   final templateKey = TextEditingController();
+  int? facilityId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.facilities.length == 1) {
+      facilityId = (widget.facilities.first['id'] as num?)?.toInt();
+    }
+  }
 
   @override
   void dispose() {
@@ -761,6 +779,7 @@ class _ProductCreateDialogState extends State<ProductCreateDialog> {
         name: name.text.trim(),
         description: description.text.trim(),
         templateKey: templateKey.text.trim().toLowerCase(),
+        facilityId: facilityId,
       ),
     );
   }
@@ -809,6 +828,24 @@ class _ProductCreateDialogState extends State<ProductCreateDialog> {
                   hintText: 'tule-breakfast',
                 ),
               ),
+              if (widget.facilities.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: facilityId,
+                  decoration: const InputDecoration(labelText: 'Cơ sở sản xuất'),
+                  items: [
+                    for (final facility in widget.facilities)
+                      DropdownMenuItem(
+                        value: (facility['id'] as num?)?.toInt(),
+                        child: Text('${facility['name'] ?? ''}'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => facilityId = value),
+                  validator: (value) => value == null
+                      ? 'Chọn cơ sở làm ra sản phẩm này.'
+                      : null,
+                ),
+              ],
             ],
           ),
         ),
