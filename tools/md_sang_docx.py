@@ -105,6 +105,25 @@ def code_block(document, lines):
         run.font.size = CODE_SIZE
 
 
+def picture(document, source, path, caption):
+    """Chèn ảnh theo đường dẫn tương đối với tệp Markdown, kèm chú thích."""
+    target = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(source)), path)
+    )
+    if not os.path.exists(target):
+        sys.exit('Không thấy ảnh: %s' % target)
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # 16 cm = khổ A4 trừ lề trái 3 cm và lề phải 2 cm.
+    paragraph.add_run().add_picture(target, width=Cm(16))
+    if caption:
+        note = document.add_paragraph()
+        note.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = note.add_run(caption)
+        run.italic = True
+        run.font.size = Pt(12)
+
+
 def split_row(line):
     return [cell.strip() for cell in line.strip().strip('|').split('|')]
 
@@ -132,6 +151,12 @@ def convert(source, target):
                 block.append(lines[index])
                 index += 1
             code_block(document, block)
+            index += 1
+            continue
+
+        image = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)\s*$', stripped)
+        if image:
+            picture(document, source, image.group(2), image.group(1))
             index += 1
             continue
 

@@ -93,6 +93,10 @@ graph TB
 
 ```mermaid
 erDiagram
+    facilities ||--o{ products : "sở hữu danh mục"
+    facilities ||--o{ users : "nhân sự"
+    users ||--o{ sessions : "phiên đăng nhập"
+    users ||--o{ audit_log : "thao tác"
     product_batches ||--o{ ingredient_batches : "chứa"
     product_batches ||--o{ process_events : "công đoạn cấp lô"
     ingredient_batches ||--o{ process_events : "công đoạn cấp nguyên liệu"
@@ -170,6 +174,40 @@ erDiagram
         text source
         text created_at
     }
+    facilities {
+        integer id PK
+        text code
+        text name
+        text created_at
+    }
+    users {
+        integer id PK
+        text username
+        text full_name
+        text role
+        integer facility_id FK
+        text password_hash
+        integer active
+        text created_at
+        text last_login_at
+    }
+    sessions {
+        text token_hash PK
+        integer user_id FK
+        text created_at
+        text expires_at
+        text last_seen_at
+    }
+    audit_log {
+        integer id PK
+        integer user_id FK
+        text username
+        text role
+        text action
+        text target
+        text detail
+        text created_at
+    }
     blockchain_outbox {
         integer id PK
         integer snapshot_id FK
@@ -195,6 +233,10 @@ erDiagram
 | `media_assets` | Khoá nội dung | `r2_key` có dạng `media/<sha256>.<ext>` |
 | `batch_ratings` | CHECK | `stars` trong khoảng 1..5 |
 | `batch_ratings` | UNIQUE | `(product_batch_id, device_hash)`: một máy một phiếu cho mỗi lô, gửi lại là sửa |
+| `users` | UNIQUE | `username` là duy nhất; `role` thuộc `ADMIN`, `FACILITY`, `STAFF` |
+| `users` | Ràng buộc nghiệp vụ | Vai trò khác `ADMIN` bắt buộc có `facility_id` |
+| `sessions` | Khoá chính | `token_hash` là SHA-256 của token phiên; token không được lưu |
+| `products` | FK | `facility_id` quyết định lô thuộc cơ sở nào (lô suy ra qua `product_id`) |
 | Tất cả bảng con | ON DELETE CASCADE | Xoá lô kéo theo nguyên liệu, công đoạn, bản công bố |
 
 ### 4.2 Trạng thái
@@ -205,6 +247,8 @@ erDiagram
 | Bản ghi neo chuỗi | `status` | `PENDING_NETWORK`, `CONFIRMED`, `FAILED`, `SKIPPED` |
 | Kiểm chứng | (tính toán) | `VERIFIED`, `MISMATCH`, `NOT_PUBLISHED`, `UNKNOWN` |
 | Đánh giá | `source` | `APP`, `WEB` (người dùng tự gửi), `SURVEY` (nhập từ phiếu khảo sát), `DEMO` (dữ liệu dựng sẵn) |
+| Tài khoản | `role` | `ADMIN` (toàn hệ thống), `FACILITY` (một cơ sở, được công bố lô), `STAFF` (một cơ sở, chỉ khai công đoạn và ảnh) |
+| Tài khoản | `active` | `1` dùng được, `0` bị khoá — khoá là đóng luôn mọi phiên đang mở |
 
 ### 4.3 Đánh giá nằm ngoài vùng băm
 
@@ -216,6 +260,32 @@ lô sang trạng thái `MISMATCH` và buộc neo lại một giao dịch.
 
 `device_hash` là SHA-256 của mã ẩn danh do máy khách sinh ra; hệ thống không lưu
 mã gốc, chỉ cần biết hai lần gửi có cùng một máy hay không.
+
+### 4.4 Tài khoản, vai trò và nhật ký
+
+Mỗi người vận hành có một tài khoản; mỗi tài khoản thuộc một vai trò và (trừ
+`ADMIN`) thuộc một cơ sở. Cơ sở gắn ở catalog sản phẩm chứ không gắn ở từng lô:
+một mã sản phẩm chỉ do một cơ sở làm, còn lô thì sinh ra liên tục, nên lô suy ra
+cơ sở qua `product_id`.
+
+Ba điểm về cách làm:
+
+- **Quyền kiểm ở máy chủ.** Giao diện ẩn nút theo vai trò, nhưng chốt chặn nằm ở
+  `worker/src/auth.ts`: mỗi điểm cuối gọi `requirePermission` rồi `assertFacility`.
+  Việc lọc theo cơ sở nằm trong câu SQL của `listBatches`, `listProducts`,
+  `summary`, không phải lọc lại ở client.
+- **Người khai báo lấy từ phiên.** `process_events.entered_by` và
+  `published_snapshots.published_by` ghi tên tài khoản đang đăng nhập, bỏ qua
+  giá trị máy khách gửi lên. Nhận từ máy khách thì hai cột đó không còn là bằng
+  chứng.
+- **Nhật ký nằm ngoài vùng băm.** `audit_log` không tham gia `snapshotPayload`,
+  cùng lý do với `batch_ratings` ở mục 4.3: `verify()` băm lại dữ liệu hiện hành
+  rồi so với mã băm đã neo, nên mọi trường thêm vào payload sẽ đẩy toàn bộ lô đã
+  công bố sang `MISMATCH`.
+
+Mật khẩu lưu dạng `pbkdf2$150000$<salt>$<hash>` (PBKDF2-SHA256, muối riêng từng
+tài khoản). Phiên sống 12 giờ; bảng `sessions` chỉ giữ mã băm của token. Đổi mật
+khẩu, khoá tài khoản hoặc đổi vai trò đều xoá mọi phiên của người đó.
 
 ## 5. Cơ chế toàn vẹn dữ liệu
 
@@ -339,44 +409,64 @@ Do khoá đặt theo nội dung, tải lên cùng một tệp nhiều lần ch�
 | POST | `/api/public/traces/{code}/ratings` | Gửi đánh giá: `stars` 1..5, `deviceId`, tuỳ chọn `comment`, `displayName` |
 | GET | `/api/media/media/{sha256}.{ext}` | Tệp đính kèm |
 
-### 7.2 Điểm cuối quản trị
-
-Yêu cầu tiêu đề `Authorization: Bearer <ADMIN_TOKEN>`.
+### 7.2 Đăng nhập
 
 | Phương thức | Đường dẫn | Mô tả |
 | --- | --- | --- |
-| GET | `/api/admin/session` | Kiểm tra token |
-| GET | `/api/admin/summary` | Số liệu tổng hợp |
-| GET | `/api/admin/ratings` | Thống kê đánh giá theo lô và theo nguồn |
-| POST | `/api/admin/ratings` | Nhập một đánh giá (phiếu khảo sát, dữ liệu dựng sẵn) |
-| DELETE | `/api/admin/ratings/{source}` | Xoá toàn bộ đánh giá của một nguồn |
-| GET | `/api/admin/product-batches` | Danh sách lô; tham số `q`, `sort`, `page`, `limit` |
-| POST | `/api/admin/product-batches` | Tạo lô |
-| PATCH | `/api/admin/product-batches/{code}` | Cập nhật thông tin lô |
-| GET | `/api/admin/product-batches/{code}/trace` | Hồ sơ theo dữ liệu hiện hành |
-| POST | `/api/admin/product-batches/{code}/publish` | Công bố phiên bản mới |
-| GET | `/api/admin/product-batches/{code}/snapshots` | Danh sách bản công bố kèm trạng thái neo chuỗi |
-| GET | `/api/admin/product-batches/{code}/snapshots/{version}` | Nội dung một bản công bố |
-| POST | `/api/admin/ingredient-batches` | Tạo lô nguyên liệu |
-| PATCH | `/api/admin/ingredient-batches/{id}` | Cập nhật lô nguyên liệu |
-| DELETE | `/api/admin/ingredient-batches/{id}` | Xoá lô nguyên liệu và dữ liệu phụ thuộc |
-| POST | `/api/admin/process-events` | Tạo công đoạn |
-| PATCH | `/api/admin/process-events/{id}` | Cập nhật công đoạn |
-| DELETE | `/api/admin/process-events/{id}` | Xoá công đoạn |
-| GET | `/api/admin/media/config` | Giới hạn dung lượng và định dạng cho phép |
-| POST | `/api/admin/media` | Tải tệp (multipart: `file`, `ownerType`, `ownerId`, `role`, `caption`) |
-| DELETE | `/api/admin/media/{id}` | Gỡ tệp khỏi đối tượng |
-| GET | `/api/admin/chain` | Trạng thái ví, mạng và hàng chờ |
-| POST | `/api/admin/chain/send` | Gửi ngay các bản ghi trong hàng chờ |
-| POST | `/api/admin/chain/retry` | Đặt lại bản ghi `FAILED` |
+| POST | `/api/auth/login` | `{username, password}` → `{token, expiresAt, user}` |
+| POST | `/api/auth/logout` | Xoá phiên của bearer token đang dùng |
 
-### 7.3 Mã trạng thái và lỗi
+### 7.3 Điểm cuối quản trị
+
+Yêu cầu tiêu đề `Authorization: Bearer <token>`, trong đó token là **token phiên**
+của một tài khoản, hoặc `ADMIN_TOKEN` dùng như cửa dự phòng cho script vận hành
+(mang vai trò `ADMIN`, ghi nhật ký dưới tên `token-quan-tri`).
+
+Cột *Quyền* là quyền tối thiểu cần có; mọi điểm cuối gắn với một lô còn bị chặn
+thêm theo cơ sở của người gọi.
+
+| Phương thức | Đường dẫn | Quyền | Mô tả |
+| --- | --- | --- | --- |
+| GET | `/api/admin/session` | mọi vai trò | Người đang đăng nhập là ai, được làm gì |
+| GET | `/api/admin/summary` | mọi vai trò | Số liệu tổng hợp, lọc theo cơ sở |
+| GET | `/api/admin/facilities` | mọi vai trò | Danh sách cơ sở |
+| GET | `/api/admin/users` | `manageUsers` | Danh sách tài khoản |
+| POST | `/api/admin/users` | `manageUsers` | Tạo tài khoản |
+| PATCH | `/api/admin/users/{id}` | `manageUsers` | Đổi họ tên, mật khẩu, vai trò, cơ sở, khoá/mở |
+| POST | `/api/admin/users/me/password` | mọi vai trò | Tự đổi mật khẩu, phải nhập mật khẩu cũ |
+| GET | `/api/admin/audit` | `viewAudit` | Nhật ký thao tác; `limit`, `target` |
+| GET | `/api/admin/ratings` | `manageRatings` | Thống kê đánh giá theo lô và theo nguồn |
+| POST | `/api/admin/ratings` | `manageRatings` | Nhập một đánh giá (phiếu khảo sát, dữ liệu dựng sẵn) |
+| DELETE | `/api/admin/ratings/{source}` | `manageRatings` | Xoá toàn bộ đánh giá của một nguồn |
+| GET | `/api/admin/product-batches` | mọi vai trò | Danh sách lô của cơ sở mình; `q`, `sort`, `page`, `limit` |
+| POST | `/api/admin/product-batches` | `manageBatch` | Tạo lô |
+| PATCH | `/api/admin/product-batches/{code}` | `manageBatch` | Cập nhật thông tin lô |
+| GET | `/api/admin/product-batches/{code}/trace` | mọi vai trò | Hồ sơ theo dữ liệu hiện hành |
+| POST | `/api/admin/product-batches/{code}/publish` | `publish` | Công bố phiên bản mới |
+| GET | `/api/admin/product-batches/{code}/snapshots` | mọi vai trò | Danh sách bản công bố kèm trạng thái neo chuỗi |
+| GET | `/api/admin/product-batches/{code}/snapshots/{version}` | mọi vai trò | Nội dung một bản công bố |
+| POST | `/api/admin/products` | `manageCatalog` | Thêm sản phẩm vào danh mục |
+| POST | `/api/admin/ingredient-batches` | `manageBatch` | Tạo lô nguyên liệu |
+| PATCH | `/api/admin/ingredient-batches/{id}` | `manageBatch` | Cập nhật lô nguyên liệu |
+| DELETE | `/api/admin/ingredient-batches/{id}` | `manageBatch` | Xoá lô nguyên liệu và dữ liệu phụ thuộc |
+| POST | `/api/admin/process-events` | `manageEvent` | Tạo công đoạn, ghi tên người đăng nhập |
+| PATCH | `/api/admin/process-events/{id}` | `manageEvent` | Cập nhật công đoạn |
+| DELETE | `/api/admin/process-events/{id}` | `manageBatch` | Xoá công đoạn |
+| GET | `/api/admin/media/config` | mọi vai trò | Giới hạn dung lượng và định dạng cho phép |
+| POST | `/api/admin/media` | `manageMedia` | Tải tệp (multipart: `file`, `ownerType`, `ownerId`, `role`, `caption`) |
+| DELETE | `/api/admin/media/{id}` | `manageMedia` | Gỡ tệp khỏi đối tượng |
+| GET | `/api/admin/chain` | `viewChain` | Trạng thái ví, mạng và hàng chờ |
+| POST | `/api/admin/chain/send` | `manageChain` | Gửi ngay các bản ghi trong hàng chờ |
+| POST | `/api/admin/chain/retry` | `manageChain` | Đặt lại bản ghi `FAILED` |
+
+### 7.4 Mã trạng thái và lỗi
 
 | Mã | Trường hợp |
 | --- | --- |
 | 200 / 201 | Thành công |
 | 400 | Dữ liệu đầu vào không hợp lệ (thiếu trường, sai định dạng, vi phạm ràng buộc) |
-| 401 | Thiếu hoặc sai token quản trị |
+| 401 | Thiếu token, sai token, hoặc phiên đã hết hạn |
+| 403 | Đúng người nhưng sai quyền, hoặc dữ liệu thuộc cơ sở khác |
 | 404 | Không tìm thấy đối tượng |
 | 413 | Tệp vượt giới hạn dung lượng |
 | 415 | Định dạng tệp không được phép |
@@ -394,9 +484,9 @@ lib/
   pages/        ExplorerPage, ManagementPage
   ui/           Theme, khung trang, panel hành trình, bản đồ, media, thành phần dùng chung
 worker/
-  src/          index.ts, trace.ts, chain.ts, media.ts, canonical.ts, validate.ts, geojson.ts, env.ts
-  migrations/   0001–0007
-  scripts/      smoke-test, deploy-contract, chain-status, chain-verify, copy-batch, apply-process
+  src/          index.ts, auth.ts, trace.ts, chain.ts, media.ts, canonical.ts, validate.ts, geojson.ts, env.ts
+  migrations/   0001–0013
+  scripts/      smoke-test, test-phan-quyen, do-chi-so-chuoi, deploy-contract, chain-status, chain-verify, copy-batch, apply-process
   schema.sql    Định nghĩa bảng
   seed.sql      Dữ liệu khởi tạo
 contracts/      TuleTrace.sol, ABI biên dịch
@@ -415,6 +505,9 @@ assets/         Phông chữ, ảnh nguyên liệu, ảnh sản phẩm
 | RB-05 | Không hiển thị vùng nguyên liệu ở độ chính xác cao hơn thứ dữ liệu thật sự có. Trường bán kính tự khai đã bị bỏ; vùng chỉ thể hiện bằng ảnh bản đồ hành chính do người vận hành tải lên, hoặc bằng ranh giới thật lưu ở `area_geojson` |
 | RB-06 | Dữ liệu chi phí, giá vốn và lợi nhuận không được đưa vào payload công bố |
 | RB-07 | Công bố không ghi đè bản trước; mỗi lần công bố tạo một phiên bản mới |
+| RB-08 | Phân quyền kiểm ở máy chủ trên từng lệnh gọi, không chỉ ẩn nút trên giao diện; việc lọc theo cơ sở nằm trong câu truy vấn |
+| RB-09 | Tên người khai báo và người công bố lấy từ phiên đăng nhập, không nhận từ máy khách |
+| RB-10 | Nhật ký thao tác và đánh giá của người mua nằm ngoài payload công bố, để không làm đổi mã băm của lô đã neo |
 
 ## 10. Yêu cầu phi chức năng
 
