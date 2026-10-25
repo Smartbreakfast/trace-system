@@ -1491,6 +1491,12 @@ export async function deleteRatings(db: D1Database, source: RatingSource) {
  */
 export async function recordView(db: D1Database, code: string) {
   const product = await findProduct(db, code);
+  // Chỉ đếm lô đã công bố. Lô nháp không có mặt trên trang công khai, nên một
+  // lượt xem của nó chỉ có thể đến từ người đoán mã, và cộng nó vào con số đưa
+  // ra báo cáo là tự làm bẩn số của mình.
+  if (String(product.status) !== 'PUBLISHED') {
+    throw new ApiError(404, 'TRACE_NOT_FOUND', 'Không tìm thấy mã truy xuất.');
+  }
   const at = nowIso();
   await db
     .prepare(

@@ -540,6 +540,30 @@ check(
   `${before} -> ${after}`,
 );
 
+// Nhân viên công đoạn không được xem trang Chỉ số. Tài khoản này đã bị khoá ở
+// mục 7 nên phải mở lại và đăng nhập lần nữa mới kiểm được.
+const staffRow2 = (await call(TOKEN, 'GET', '/api/admin/users')).data.find(
+  (row) => row.username === accounts.nhanVienTule.username,
+);
+await call(TOKEN, 'PATCH', `/api/admin/users/${staffRow2.id}`, {
+  active: true,
+  password: 'matkhaunhanvien2026',
+});
+const staffAgain = await call(null, 'POST', '/api/auth/login', {
+  username: accounts.nhanVienTule.username,
+  password: 'matkhaunhanvien2026',
+});
+const staffMetrics = await call(
+  staffAgain.data.token,
+  'GET',
+  '/api/admin/metrics',
+);
+check(
+  'nhân viên công đoạn không xem được trang Chỉ số',
+  staffMetrics.status === 403,
+  `status ${staffMetrics.status}`,
+);
+
 const trauViews = await call(sessions.trauFacility, 'GET', '/api/admin/metrics');
 check(
   'phụ trách cơ sở này không thấy lượt xem lô của cơ sở kia',

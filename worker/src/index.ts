@@ -390,6 +390,7 @@ app.get('/api/admin/audit', async (c) => {
 /// Chỉ số cho báo cáo: phần hệ thống tự đếm và phần do cơ sở sản xuất khai.
 app.get('/api/admin/metrics', async (c) => {
   const me = c.get('auth');
+  auth.requirePermission(me, 'viewMetrics');
   const [views, reported] = await Promise.all([
     trace.viewStats(c.env.DB, scopeOf(me)),
     trace.listReportedMetrics(c.env.DB),

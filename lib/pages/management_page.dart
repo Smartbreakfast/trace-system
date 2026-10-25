@@ -218,7 +218,7 @@ class _ManagementPageState extends State<ManagementPage> {
       _loadChain(),
       if (_can('manageUsers')) _loadAccounts(),
       if (_can('viewAudit')) _loadAudit(),
-      _loadMetrics(),
+      if (_can('viewMetrics')) _loadMetrics(),
     ]);
   }
 

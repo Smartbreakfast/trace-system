@@ -33,6 +33,7 @@ extension AdminSectionMeta on AdminSection {
   /// Quyền cần có để thấy mục này; null là ai cũng thấy. Tên quyền trùng với
   /// bảng quyền của worker, nên thêm vai trò mới không phải sửa ở đây.
   String? get permission => switch (this) {
+    AdminSection.metrics => 'viewMetrics',
     AdminSection.accounts => 'manageUsers',
     AdminSection.audit => 'viewAudit',
     _ => null,

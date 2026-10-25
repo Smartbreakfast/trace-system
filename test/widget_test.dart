@@ -181,6 +181,8 @@ Map<String, dynamic> _sessionUser({
     'manageEvent': true,
     'manageMedia': true,
     'manageRatings': role == 'ADMIN',
+    'manageMetrics': role == 'ADMIN',
+    'viewMetrics': role != 'STAFF',
     'viewChain': role != 'STAFF',
     'manageChain': role == 'ADMIN',
     'allFacilities': role == 'ADMIN',
@@ -1580,9 +1582,10 @@ void main() {
     // Tạo lô và thêm sản phẩm là việc của người phụ trách cơ sở.
     expect(find.text('Tạo lô mới'), findsNothing);
     expect(find.text('Thêm sản phẩm'), findsNothing);
-    // Mục tài khoản và nhật ký cũng không thuộc vai trò này.
+    // Mục tài khoản, nhật ký và chỉ số cũng không thuộc vai trò này.
     expect(find.text('Tài khoản'), findsNothing);
     expect(find.text('Nhật ký'), findsNothing);
+    expect(find.text('Chỉ số'), findsNothing);
 
     await tester.tap(find.textContaining('TL-2026-001').first);
     await _settle(tester);
