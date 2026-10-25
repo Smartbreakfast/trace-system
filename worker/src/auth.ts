@@ -40,7 +40,11 @@ const nowIso = () => new Date().toISOString();
 
 /** Phiên sống 12 giờ: đủ một ngày làm việc, hết ngày là phải đăng nhập lại. */
 const SESSION_HOURS = 12;
-const PBKDF2_ROUNDS = 150_000;
+// 100.000 là trần của runtime Cloudflare Workers: đặt cao hơn thì bản local
+// (miniflare) vẫn chạy nhưng bản thật ném NotSupportedError ngay khi tạo tài
+// khoản. Số vòng được ghi vào chính chuỗi băm, nên nâng trần sau này không làm
+// hỏng mật khẩu đã lưu.
+const PBKDF2_ROUNDS = 100_000;
 
 /** Sai mật khẩu 5 lần liên tiếp thì khoá tạm 15 phút, rồi tự mở lại. */
 const MAX_FAILED = 5;
@@ -55,7 +59,7 @@ const LOCK_MINUTES = 15;
  * đúng một lần băm giống hệt đường thật.
  */
 const DUMMY_HASH =
-  'pbkdf2$150000$Y2hhbmctYmFvLWdpby1kdW5n$' +
+  `pbkdf2$${PBKDF2_ROUNDS}$Y2hhbmctYmFvLWdpby1kdW5n$` +
   'n0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0Zq0h4Cm0E=';
 
 const encoder = new TextEncoder();

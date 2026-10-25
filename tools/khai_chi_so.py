@@ -88,6 +88,8 @@ def call(base, key, method, body=None):
         data=json.dumps(body).encode('utf-8') if body else None,
         headers={
             'authorization': 'Bearer %s' % TOKEN,
+            # Cloudflare chặn user-agent mặc định của urllib bằng lỗi 1010.
+            'User-Agent': 'tule-trace-tools/1.0',
             **({'content-type': 'application/json'} if body else {}),
         },
     )

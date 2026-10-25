@@ -51,7 +51,8 @@ cũng được, không còn là bằng chứng. Tên người công bố lô cũ
 ## 4. Mật khẩu và phiên đăng nhập
 
 - Mật khẩu **không được lưu**. Hệ thống lưu kết quả băm PBKDF2-SHA256 với
-  150.000 vòng lặp và một chuỗi muối ngẫu nhiên riêng cho từng tài khoản. Từ
+  100.000 vòng lặp và một chuỗi muối ngẫu nhiên riêng cho từng tài khoản (đây
+  là trần của nền tảng Cloudflare Workers). Từ
   bảng tài khoản không có đường nào đọc ngược ra mật khẩu.
 - Phiên đăng nhập sống 12 giờ, đủ một ngày làm việc. Máy chủ cũng chỉ lưu mã
   băm của token phiên, không lưu token.

@@ -5,3 +5,6 @@ scripts/.demo-media/
 
 # Token quản trị production, chỉ nằm trên máy bạn.
 .admin-token.txt
+
+# Mật khẩu ban đầu của các tài khoản production, chỉ nằm trên máy bạn.
+.tai-khoan.txt

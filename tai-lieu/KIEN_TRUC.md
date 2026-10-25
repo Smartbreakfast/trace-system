@@ -300,7 +300,7 @@ Ba điểm về cách làm:
   rồi so với mã băm đã neo, nên mọi trường thêm vào payload sẽ đẩy toàn bộ lô đã
   công bố sang `MISMATCH`.
 
-Mật khẩu lưu dạng `pbkdf2$150000$<salt>$<hash>` (PBKDF2-SHA256, muối riêng từng
+Mật khẩu lưu dạng `pbkdf2$100000$<salt>$<hash>` (PBKDF2-SHA256, muối riêng từng
 tài khoản). Phiên sống 12 giờ; bảng `sessions` chỉ giữ mã băm của token. Đổi mật
 khẩu, khoá tài khoản hoặc đổi vai trò đều xoá mọi phiên của người đó.
 
