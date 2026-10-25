@@ -13,6 +13,7 @@ import '../models/trace_models.dart'
         AuditEntry,
         BatchPage,
         BatchRef,
+        MetricsReport,
         ProductCatalog,
         PublicProduct,
         RatingSummary;
@@ -342,6 +343,57 @@ class TraceApi {
       for (final item in data)
         if (item is Map<String, dynamic>) AuditEntry.fromApi(item),
     ];
+  }
+
+  Future<MetricsReport> metrics() async {
+    final data = await _send(
+      () => _client.get(_uri('/admin/metrics'), headers: _headers(admin: true)),
+    );
+    return data is Map<String, dynamic>
+        ? MetricsReport.fromApi(data)
+        : const MetricsReport(totalViews: 0, byBatch: [], reported: []);
+  }
+
+  Future<void> saveMetric({
+    required String key,
+    required String label,
+    required String value,
+    required String source,
+    String note = '',
+  }) async {
+    await _send(
+      () => _client.put(
+        _uri('/admin/metrics/$key'),
+        headers: _headers(json: true, admin: true),
+        body: jsonEncode({
+          'label': label,
+          'value': value,
+          'source': source,
+          'note': note,
+        }),
+      ),
+    );
+  }
+
+  Future<void> deleteMetric(String key) async {
+    await _send(
+      () => _client.delete(
+        _uri('/admin/metrics/$key'),
+        headers: _headers(admin: true),
+      ),
+    );
+  }
+
+  /// Ghi một lượt mở hồ sơ. Lỗi ở đây không được làm hỏng việc xem hồ sơ, nên
+  /// nuốt mọi ngoại lệ: người mua quét mã không cần biết bộ đếm có chạy hay không.
+  Future<void> recordView(String code) async {
+    try {
+      await _client
+          .post(_uri('/public/traces/$code/view'))
+          .timeout(timeout);
+    } catch (_) {
+      // bỏ qua
+    }
   }
 
   Future<Map<String, dynamic>> getSummary() async {

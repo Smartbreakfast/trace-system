@@ -277,6 +277,41 @@ MockClient _adminClient({String role = 'ADMIN'}) => MockClient((request) async {
       },
     ]);
   }
+  if (path.contains('/admin/metrics')) {
+    return _json({
+      'views': {
+        'total': 42,
+        'batches': 2,
+        'byBatch': [
+          {
+            'code': 'TL-2026-004',
+            'name': 'Tú Lệ Smart Breakfast',
+            'views': 30,
+            'firstAt': '2026-10-20T01:00:00.000Z',
+            'lastAt': '2026-10-24T01:00:00.000Z',
+          },
+          {
+            'code': 'TB-2026-002',
+            'name': 'Thịt trâu gác bếp',
+            'views': 12,
+            'firstAt': '2026-10-21T01:00:00.000Z',
+            'lastAt': '2026-10-24T02:00:00.000Z',
+          },
+        ],
+      },
+      'reported': [
+        {
+          'key': 'nguoi-khao-sat',
+          'label': 'Số người tham gia khảo sát',
+          'value': '1.315 người',
+          'source': 'Phiếu khảo sát khách hàng do cơ sở cung cấp',
+          'note': '',
+          'updatedAt': '2026-10-25T01:00:00.000Z',
+          'updatedBy': 'quantri',
+        },
+      ],
+    });
+  }
   if (path.contains('/admin/audit')) {
     return _json([
       {
@@ -1560,6 +1595,53 @@ void main() {
     );
     // Việc của họ thì vẫn mở: khai công đoạn.
     expect(find.text('Thêm công đoạn'), findsOneWidget);
+  });
+
+  testWidgets('trang Chỉ số tách số hệ thống đếm khỏi số cơ sở khai', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'tule_admin_token': 'phien-admin'});
+
+    await tester.pumpWidget(_adminApp(_api(_adminClient())));
+    await _settle(tester);
+
+    await tester.tap(find.text('Chỉ số'));
+    await _settle(tester);
+
+    // Nửa hệ thống tự đếm.
+    expect(find.text('Hệ thống tự đếm'), findsOneWidget);
+    expect(find.text('42'), findsOneWidget);
+    expect(find.textContaining('TL-2026-004'), findsOneWidget);
+
+    // Nửa do cơ sở khai: giá trị nào cũng phải hiện kèm nguồn của nó.
+    expect(find.text('Cơ sở sản xuất cung cấp'), findsOneWidget);
+    expect(find.text('1.315 người'), findsOneWidget);
+    expect(
+      find.textContaining('Nguồn: Phiếu khảo sát khách hàng'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('phụ trách cơ sở xem được Chỉ số nhưng không khai được', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'tule_admin_token': 'phien-coso'});
+
+    await tester.pumpWidget(_adminApp(_api(_adminClient(role: 'FACILITY'))));
+    await _settle(tester);
+
+    await tester.tap(find.text('Chỉ số'));
+    await _settle(tester);
+
+    expect(find.text('Hệ thống tự đếm'), findsOneWidget);
+    // Khai chỉ số là việc của quản trị; worker cũng chặn, đây chỉ là phần nhìn.
+    expect(find.text('Khai chỉ số'), findsNothing);
   });
 
   testWidgets('quản trị thấy mục tài khoản và nhật ký, kèm người đã khai', (

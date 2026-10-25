@@ -1,7 +1,8 @@
 # Số liệu hệ thống Tú Lệ Trace cho báo cáo
 
-Chốt ngày **21/10/2026**. Mọi con số dưới đây đọc thẳng từ hệ thống đang chạy;
-mục 5 ghi cách lấy lại để kiểm.
+Chốt ngày **21/10/2026**, bổ sung mục Chỉ số ngày **25/10/2026**. Mọi con số
+dưới đây đọc thẳng từ hệ thống đang chạy, trừ những dòng ghi rõ là do cơ sở sản
+xuất cung cấp; mục 5 ghi cách lấy lại để kiểm.
 
 ## 1. Bảng chỉ số hệ thống
 
@@ -26,10 +27,23 @@ Hai chỗ khác với bản nháp đang có trong báo cáo:
 
 | Chỉ số | Kết quả | Nguồn số liệu |
 |---|---|---|
-| Số người sử dụng | **1 tài khoản quản trị** (dùng chung cho hai cơ sở nhập liệu). Hệ thống cố ý không bắt người mua đăng ký: quét mã là xem được ngay, không cần tài khoản | Hệ thống tài khoản quản trị, 21/10/2026 |
-| Số người mua | *(do cơ sở sản xuất cung cấp từ danh sách khách hàng và phiếu khảo sát)* | Cơ sở sản xuất |
-| Số lượt truy xuất | **1.806 lượt**, từ 21/09/2026 đến 21/10/2026, 0 lỗi, trên tên miền `trace.smartbreakfast.store`. Riêng 24 giờ gần nhất: 130 lượt | Thống kê truy cập Cloudflare, đọc ngày 21/10/2026 |
+| Số người sử dụng sản phẩm | **1.315 người** | Danh sách khách hàng và phiếu khảo sát của cơ sở sản xuất; hiện trên hệ thống ở mục **Chỉ số** |
+| Số tài khoản trên hệ thống | Tài khoản theo ba vai trò: quản trị hệ thống, phụ trách cơ sở, nhân viên công đoạn. Người mua không cần tài khoản: quét mã là xem được ngay | Mục **Tài khoản** của màn quản trị |
+| Số lượt truy xuất | **1.806 lượt**, từ 21/09/2026 đến 21/10/2026, 0 lỗi, trên tên miền `trace.smartbreakfast.store`. Từ 25/10/2026 hệ thống tự đếm tiếp, xem mục **Chỉ số** | Thống kê truy cập Cloudflare (giai đoạn trước); bộ đếm của hệ thống (từ 25/10/2026) |
 | Đánh giá của người sử dụng | **27 lượt**, trung bình **4,56/5 sao**, trong đó 93% cho từ 4 sao trở lên, không có lượt nào dưới 3 sao | Mục đánh giá trên trang truy xuất, 21/10/2026 |
+
+Ba dòng đầu đều mở được ngay trên màn quản trị, mục **Chỉ số**. Trang đó chia
+làm hai nửa và không trộn vào nhau: nửa trên là thứ hệ thống tự đếm, nửa dưới
+là thứ cơ sở sản xuất cung cấp, mỗi con số kèm đúng nguồn của nó. Người chấm hồ
+sơ hỏi "số này ở đâu ra" thì câu trả lời nằm ngay dưới con số, không phải đi
+tìm.
+
+Riêng dòng **số người sử dụng sản phẩm**: đây là số của cơ sở sản xuất, không
+phải số hệ thống đếm được. Hệ thống cố ý không bắt người mua đăng ký nên không
+có cách nào đếm đầu người từ phía máy chủ. Báo cáo nên viết đúng như vậy — ghi
+nguồn là danh sách khách hàng và phiếu khảo sát của cơ sở — thay vì để nguồn là
+"danh sách tài khoản", vì trên hệ thống không có 1.315 tài khoản và người chấm
+mở mục Tài khoản ra là thấy.
 
 ## 3. Đánh giá của người sử dụng
 
@@ -105,6 +119,13 @@ dõi người dùng. Đây là chủ ý, và cũng là nội dung sẽ khai tron
 rằng ứng dụng không thu thập dữ liệu nào. Số lượt truy cập vì vậy lấy ở lớp hạ
 tầng Cloudflare. Đọc ngày 21/10/2026:
 
+Từ 25/10/2026 hệ thống có bộ đếm riêng: mỗi lần một hồ sơ lô được mở là cộng
+một lượt, tách theo từng lô, xem ở mục **Chỉ số**. Bộ đếm chỉ lưu một con số —
+không IP, không mã thiết bị, không thời điểm của từng lượt — nên vẫn giữ được
+lời khai "ứng dụng không thu thập dữ liệu" trong hồ sơ App Store. Số của giai
+đoạn trước ngày bật vẫn phải lấy ở Cloudflare, và đang được khai vào đúng nửa
+"cơ sở cung cấp" của trang Chỉ số kèm ngày đọc.
+
 | Chỉ số | 30 ngày | 24 giờ |
 |---|---|---|
 | Lượt gọi tới trang truy xuất và API trên tên miền chính (Cloudflare Pages) | 1.806, 0 lỗi | 130 |
@@ -137,6 +158,8 @@ Ba cách lấy lại hoặc làm cho số sạch hơn:
 | Số lô đã neo, gas, phí, độ trễ | `node worker/scripts/do-chi-so-chuoi.mjs` |
 | Tổng số sản phẩm, lô, nguyên liệu, công đoạn, tệp | `GET /api/admin/summary` (cần token quản trị) |
 | Đánh giá: tổng, trung bình, tách theo nguồn | `GET /api/admin/ratings` (cần token quản trị) |
+| Lượt mở hồ sơ và các chỉ số do cơ sở khai | `GET /api/admin/metrics` (cần token quản trị), hoặc mục **Chỉ số** trên màn quản trị |
+| Khai lại một chỉ số sau khi cơ sở đưa số mới | Sửa bảng `METRICS` trong `tools/khai_chi_so.py` rồi chạy `python tools/khai_chi_so.py --production` |
 
 ---
 

@@ -220,6 +220,21 @@ app.post('/api/public/traces/:code/ratings', async (c) => {
   return c.json(summary, 201);
 });
 
+/**
+ * Ghi một lượt mở hồ sơ lô. Chỉ cộng một số đếm: không IP, không thiết bị,
+ * không thời điểm từng lượt, nên vẫn khai được "không thu thập dữ liệu" ở hồ
+ * sơ App Store. Lỗi ở đây không được làm hỏng việc xem hồ sơ.
+ */
+app.post('/api/public/traces/:code/view', async (c) => {
+  try {
+    return c.json(
+      await trace.recordView(c.env.DB, normalizeCode(c.req.param('code'))),
+    );
+  } catch {
+    return c.json({ views: null }, 200);
+  }
+});
+
 app.get('/api/media/*', (c) => {
   const key = decodeURIComponent(
     new URL(c.req.url).pathname.replace('/api/media/', ''),
@@ -370,6 +385,41 @@ app.get('/api/admin/audit', async (c) => {
       facilityId: scopeOf(me),
     }),
   );
+});
+
+/// Chỉ số cho báo cáo: phần hệ thống tự đếm và phần do cơ sở sản xuất khai.
+app.get('/api/admin/metrics', async (c) => {
+  const me = c.get('auth');
+  const [views, reported] = await Promise.all([
+    trace.viewStats(c.env.DB, scopeOf(me)),
+    trace.listReportedMetrics(c.env.DB),
+  ]);
+  return c.json({ views, reported });
+});
+
+/// Khai một chỉ số hệ thống không tự đo được. Bắt buộc ghi nguồn.
+app.put('/api/admin/metrics/:key', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageMetrics');
+  const body = await jsonBody(c.req.raw);
+  const result = await trace.setReportedMetric(c.env.DB, {
+    key: c.req.param('key'),
+    label: str(body, 'label', 'tên chỉ số', { max: 120 }),
+    value: str(body, 'value', 'giá trị', { max: 120 }),
+    source: str(body, 'source', 'nguồn số liệu', { max: 200 }),
+    note: str(body, 'note', 'ghi chú', { optional: true, max: 400 }),
+    updatedBy: me.username,
+  });
+  await auth.writeAudit(c.env.DB, me, 'SET_METRIC', result.key, body.value ? String(body.value).slice(0, 120) : '');
+  return c.json(result);
+});
+
+app.delete('/api/admin/metrics/:key', async (c) => {
+  const me = c.get('auth');
+  auth.requirePermission(me, 'manageMetrics');
+  const result = await trace.deleteReportedMetric(c.env.DB, c.req.param('key'));
+  await auth.writeAudit(c.env.DB, me, 'DELETE_METRIC', result.key);
+  return c.json(result);
 });
 
 /// Tổng hợp đánh giá theo lô và theo nguồn, để biết bao nhiêu phiếu là thật.

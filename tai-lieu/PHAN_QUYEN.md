@@ -21,6 +21,8 @@ hoàn thiện" ở mục Hạn chế.
 | Công bố lô: chốt bản, sinh mã băm, neo chuỗi | Có | Có | Không |
 | Xoá nguyên liệu hoặc công đoạn khỏi hồ sơ | Có | Có | Không |
 | Gửi tay mã băm còn trong hàng chờ lên blockchain | Có | Không | Không |
+| Khai chỉ số do cơ sở cung cấp vào trang Chỉ số | Có | Không | Không |
+| Xem trang Chỉ số | Toàn hệ thống | Của cơ sở mình | Không |
 | Xem nhật ký thao tác | Toàn hệ thống | Của cơ sở mình | Không |
 
 Người mua không nằm trong bảng này: họ không có tài khoản. Quét mã QR là xem
@@ -87,12 +89,14 @@ nhật ký được tách riêng: ghi thêm bao nhiêu cũng không động đ�
 | Xem ba vai trò và quyền của từng vai trò | `worker/src/auth.ts`, hằng số `permissions` |
 | Chạy thử toàn bộ bảng quyền | `npm run test:phan-quyen` trong thư mục `worker/` (cần một worker chạy local) |
 | Xem nhật ký của hệ thống đang chạy | Đăng nhập màn quản trị, mục **Nhật ký** |
+| Xem các chỉ số đưa vào báo cáo và nguồn của từng chỉ số | Đăng nhập màn quản trị, mục **Chỉ số** |
 | Xem tài khoản và cơ sở | Đăng nhập bằng tài khoản quản trị, mục **Tài khoản** |
 
-Kịch bản `test:phan-quyen` dựng ba tài khoản thử rồi kiểm 33 điều, trong đó
+Kịch bản `test:phan-quyen` dựng ba tài khoản thử rồi kiểm 39 điều, trong đó
 quan trọng nhất là các điều **không** được phép: nhân viên không tạo được lô,
 không công bố được lô, không xem được nhật ký; người của cơ sở này không đọc,
 không sửa, không công bố được lô của cơ sở kia; tài khoản bị khoá thì phiên
 đang mở mất hiệu lực ngay; sai mật khẩu 5 lần thì bị khoá tạm; nhật ký của cơ
-sở này không lọt sang mắt người cơ sở kia. Chạy ngày 23/10/2026: **33/33
-đúng**.
+sở này không lọt sang mắt người cơ sở kia; chỉ số không ghi nguồn thì không
+lưu được, và phụ trách cơ sở không khai được chỉ số. Chạy ngày 25/10/2026:
+**39/39 đúng**.

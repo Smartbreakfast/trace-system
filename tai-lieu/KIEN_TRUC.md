@@ -174,6 +174,21 @@ erDiagram
         text source
         text created_at
     }
+    batch_views {
+        integer product_batch_id PK
+        integer views
+        text first_at
+        text last_at
+    }
+    reported_metrics {
+        text key PK
+        text label
+        text value
+        text source
+        text note
+        text updated_at
+        text updated_by
+    }
     facilities {
         integer id PK
         text code
@@ -233,6 +248,8 @@ erDiagram
 | `media_assets` | Khoá nội dung | `r2_key` có dạng `media/<sha256>.<ext>` |
 | `batch_ratings` | CHECK | `stars` trong khoảng 1..5 |
 | `batch_ratings` | UNIQUE | `(product_batch_id, device_hash)`: một máy một phiếu cho mỗi lô, gửi lại là sửa |
+| `batch_views` | Khoá chính | Một dòng một lô; chỉ lưu con số, không lưu người xem |
+| `reported_metrics` | NOT NULL | `source` bắt buộc và không được rỗng: số không có nguồn thì không lưu |
 | `users` | UNIQUE | `username` là duy nhất; `role` thuộc `ADMIN`, `FACILITY`, `STAFF` |
 | `users` | Ràng buộc nghiệp vụ | Vai trò khác `ADMIN` bắt buộc có `facility_id` |
 | `sessions` | Khoá chính | `token_hash` là SHA-256 của token phiên; token không được lưu |
@@ -291,6 +308,28 @@ Sai mật khẩu 5 lần liên tiếp thì `users.locked_until` khoá tài kho�
 (migration 0014); đặt lại mật khẩu hoặc mở lại tài khoản xoá luôn phần khoá đó.
 Tên đăng nhập không tồn tại vẫn đi qua đúng một lần băm với một chuỗi giả, để
 thời gian trả lời của hai đường không chênh nhau.
+
+### 4.5 Chỉ số báo cáo
+
+Hai nguồn số liệu tách bạch, cố ý không gộp thành một bảng:
+
+- `batch_views` là thứ hệ thống tự đếm: mỗi lần một hồ sơ lô được mở thì cộng
+  một. Bảng chỉ có một con số cho mỗi lô — không IP, không mã thiết bị, không
+  thời điểm từng lượt — nên vẫn giữ được lời khai "ứng dụng không thu thập dữ
+  liệu" trong hồ sơ App Store. Việc cộng đi qua một điểm cuối riêng
+  (`POST /api/public/traces/{code}/view`) chứ không gài vào `GET` hồ sơ, vì
+  `GET` còn được gọi bởi công cụ đo, bộ nhớ đệm và chính nhóm thực hiện.
+- `reported_metrics` là thứ hệ thống không đo được và phải hỏi cơ sở sản xuất:
+  số khách đã mua, số phiếu khảo sát, lượt truy cập của giai đoạn trước khi bật
+  bộ đếm. Cột `source` bắt buộc, vì một con số không nói được nó lấy ở đâu thì
+  không dùng cho báo cáo được; giao diện in nguồn ngay dưới giá trị.
+
+Màn quản trị giữ nguyên ranh giới này: mục **Chỉ số** có hai phần tiêu đề rõ
+ràng, "hệ thống tự đếm" và "cơ sở sản xuất cung cấp". Trộn hai phần lại thì
+người đọc không còn phân biệt được số nào đo được, số nào do người khai.
+
+Cả hai bảng đều nằm ngoài `snapshotPayload`, cùng lý do với `batch_ratings` và
+`audit_log`.
 
 ## 5. Cơ chế toàn vẹn dữ liệu
 
@@ -412,6 +451,7 @@ Do khoá đặt theo nội dung, tải lên cùng một tệp nhiều lần ch�
 | GET | `/api/public/traces/{code}` | Hồ sơ lô theo bản công bố mới nhất |
 | GET | `/api/public/traces/{code}/verify` | Kết quả kiểm chứng công khai |
 | POST | `/api/public/traces/{code}/ratings` | Gửi đánh giá: `stars` 1..5, `deviceId`, tuỳ chọn `comment`, `displayName` |
+| POST | `/api/public/traces/{code}/view` | Cộng một lượt mở hồ sơ. Không nhận và không lưu thông tin nào về người xem |
 | GET | `/api/media/media/{sha256}.{ext}` | Tệp đính kèm |
 
 ### 7.2 Đăng nhập
@@ -443,6 +483,9 @@ thêm theo cơ sở của người gọi.
 | GET | `/api/admin/ratings` | `manageRatings` | Thống kê đánh giá theo lô và theo nguồn |
 | POST | `/api/admin/ratings` | `manageRatings` | Nhập một đánh giá (phiếu khảo sát, dữ liệu dựng sẵn) |
 | DELETE | `/api/admin/ratings/{source}` | `manageRatings` | Xoá toàn bộ đánh giá của một nguồn |
+| GET | `/api/admin/metrics` | *(đăng nhập)* | Lượt mở hồ sơ (lọc theo cơ sở) và các chỉ số do cơ sở khai |
+| PUT | `/api/admin/metrics/{key}` | `manageMetrics` | Khai một chỉ số; thiếu `source` thì 400 |
+| DELETE | `/api/admin/metrics/{key}` | `manageMetrics` | Xoá một chỉ số đã khai |
 | GET | `/api/admin/product-batches` | mọi vai trò | Danh sách lô của cơ sở mình; `q`, `sort`, `page`, `limit` |
 | POST | `/api/admin/product-batches` | `manageBatch` | Tạo lô |
 | PATCH | `/api/admin/product-batches/{code}` | `manageBatch` | Cập nhật thông tin lô |
@@ -513,7 +556,9 @@ assets/         Phông chữ, ảnh nguyên liệu, ảnh sản phẩm
 | RB-07 | Công bố không ghi đè bản trước; mỗi lần công bố tạo một phiên bản mới |
 | RB-08 | Phân quyền kiểm ở máy chủ trên từng lệnh gọi, không chỉ ẩn nút trên giao diện; việc lọc theo cơ sở nằm trong câu truy vấn |
 | RB-09 | Tên người khai báo và người công bố lấy từ phiên đăng nhập, không nhận từ máy khách |
-| RB-10 | Nhật ký thao tác và đánh giá của người mua nằm ngoài payload công bố, để không làm đổi mã băm của lô đã neo |
+| RB-10 | Nhật ký thao tác, đánh giá của người mua, lượt mở hồ sơ và chỉ số báo cáo đều nằm ngoài payload công bố, để không làm đổi mã băm của lô đã neo |
+| RB-11 | Bộ đếm lượt mở hồ sơ chỉ lưu một con số cho mỗi lô: không IP, không mã thiết bị, không thời điểm từng lượt |
+| RB-12 | Mỗi chỉ số do cơ sở khai phải ghi nguồn; máy chủ từ chối bản ghi để trống ô nguồn |
 
 ## 10. Yêu cầu phi chức năng
 

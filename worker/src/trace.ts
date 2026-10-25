@@ -1479,3 +1479,151 @@ export async function deleteRatings(db: D1Database, source: RatingSource) {
     .run();
   return { source, deleted: Number(result.meta?.changes ?? 0) };
 }
+
+// ------------------------------------------------------------------ chỉ số
+
+/**
+ * Ghi một lượt mở hồ sơ lô. Cộng đúng một số đếm, không lưu gì về người xem.
+ *
+ * Gọi từ một endpoint riêng chứ không gài vào GET hồ sơ: GET còn được gọi bởi
+ * công cụ đo, bộ nhớ đệm và chính nhóm thực hiện khi kiểm tra, cộng vào đó thì
+ * con số không còn là "số lần người mua mở hồ sơ" nữa.
+ */
+export async function recordView(db: D1Database, code: string) {
+  const product = await findProduct(db, code);
+  const at = nowIso();
+  await db
+    .prepare(
+      `INSERT INTO batch_views (product_batch_id, views, first_at, last_at)
+       VALUES (?, 1, ?, ?)
+       ON CONFLICT(product_batch_id) DO UPDATE SET
+         views = views + 1,
+         last_at = excluded.last_at`,
+    )
+    .bind(Number(product.id), at, at)
+    .run();
+  const row = await first(
+    db,
+    'SELECT views FROM batch_views WHERE product_batch_id = ?',
+    Number(product.id),
+  );
+  return { code: String(product.code), views: Number(row?.views ?? 0) };
+}
+
+/** Lượt mở hồ sơ: tổng và tách theo lô. Lọc theo cơ sở ngay trong câu SQL. */
+export async function viewStats(
+  db: D1Database,
+  facilityId: number | null = null,
+) {
+  const scoped = facilityId !== null;
+  const of = scoped ? Math.trunc(Number(facilityId)) : null;
+  if (of !== null && !Number.isSafeInteger(of)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'Mã cơ sở không hợp lệ.');
+  }
+  const where = scoped ? `WHERE c.facility_id = ${of}` : '';
+  const rows = await all(
+    db,
+    `SELECT p.code, p.name, v.views, v.first_at, v.last_at
+       FROM batch_views v
+       JOIN product_batches p ON p.id = v.product_batch_id
+       JOIN products c ON c.id = p.product_id
+       ${where}
+      ORDER BY v.views DESC, p.code ASC`,
+  );
+  const byBatch = rows.map((row) => ({
+    code: String(row.code),
+    name: String(row.name ?? ''),
+    views: Number(row.views ?? 0),
+    firstAt: String(row.first_at ?? ''),
+    lastAt: String(row.last_at ?? ''),
+  }));
+  return {
+    total: byBatch.reduce((sum, row) => sum + row.views, 0),
+    batches: byBatch.length,
+    byBatch,
+  };
+}
+
+/**
+ * Chỉ số do cơ sở sản xuất khai: số khách đã mua, số phiếu khảo sát, lượt truy
+ * cập của giai đoạn trước khi bật bộ đếm. Hệ thống không tự đo được những số
+ * này, nên nó lưu kèm nguồn và chỉ hiện ra đúng như người khai đã ghi.
+ */
+export async function listReportedMetrics(db: D1Database) {
+  const rows = await all(
+    db,
+    `SELECT key, label, value, source, note, updated_at, updated_by
+       FROM reported_metrics ORDER BY key ASC`,
+  );
+  return rows.map((row) => ({
+    key: String(row.key),
+    label: String(row.label),
+    value: String(row.value),
+    source: String(row.source),
+    note: String(row.note ?? ''),
+    updatedAt: String(row.updated_at ?? ''),
+    updatedBy: String(row.updated_by ?? ''),
+  }));
+}
+
+export async function setReportedMetric(
+  db: D1Database,
+  input: {
+    key: string;
+    label: string;
+    value: string;
+    source: string;
+    note?: string;
+    updatedBy: string;
+  },
+) {
+  const key = input.key.trim().toLowerCase();
+  if (!/^[a-z0-9-]{2,40}$/.test(key)) {
+    throw new ApiError(
+      400,
+      'VALIDATION_FAILED',
+      'Mã chỉ số chỉ gồm chữ thường, số và dấu gạch ngang.',
+    );
+  }
+  // Số không có nguồn thì không dùng được cho báo cáo, nên chặn ngay ở đây
+  // thay vì để người khai điền sau rồi quên.
+  if (!input.source.trim()) {
+    throw new ApiError(
+      400,
+      'VALIDATION_FAILED',
+      'Phải ghi nguồn của số liệu này.',
+    );
+  }
+  await db
+    .prepare(
+      `INSERT INTO reported_metrics
+         (key, label, value, source, note, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         label = excluded.label,
+         value = excluded.value,
+         source = excluded.source,
+         note = excluded.note,
+         updated_at = excluded.updated_at,
+         updated_by = excluded.updated_by`,
+    )
+    .bind(
+      key,
+      input.label.trim(),
+      input.value.trim(),
+      input.source.trim(),
+      (input.note ?? '').trim(),
+      nowIso(),
+      input.updatedBy,
+    )
+    .run();
+  return { key };
+}
+
+export async function deleteReportedMetric(db: D1Database, key: string) {
+  const result = await db
+    .prepare('DELETE FROM reported_metrics WHERE key = ?')
+    .bind(key.trim().toLowerCase())
+    .run();
+  return { key, deleted: Number(result.meta?.changes ?? 0) };
+}

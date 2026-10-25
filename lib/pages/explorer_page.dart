@@ -151,6 +151,9 @@ class _ExplorerPageState extends State<ExplorerPage> {
       // Lưu bản sao để lần sau mất mạng vẫn mở lại được. Không chờ việc này:
       // hồ sơ đã hiện rồi, lưu được hay không cũng không đổi màn hình.
       unawaited(TraceCache.save(code, loaded.batch.name, data));
+      // Đếm một lượt mở hồ sơ. Cũng không chờ: bộ đếm là việc của báo cáo,
+      // không phải của người đang cầm điện thoại.
+      unawaited(api.recordView(code));
     } on TraceNotFound {
       if (!mounted) return;
       setState(() => phase = LoadPhase.notFound);

@@ -9,6 +9,7 @@ import '../main.dart' show traceUrlFor;
 import '../models/ingredient_draft.dart';
 import '../models/trace_models.dart';
 import '../ui/accounts_section.dart';
+import '../ui/metrics_section.dart';
 import '../ui/admin_login.dart';
 import '../ui/async_states.dart';
 import '../ui/management_components.dart';
@@ -63,6 +64,9 @@ class _ManagementPageState extends State<ManagementPage> {
   List<AuditEntry> auditEntries = const [];
   bool loadingAccounts = false;
   bool loadingAudit = false;
+
+  MetricsReport? metrics;
+  bool loadingMetrics = false;
 
   Map<String, dynamic>? summary;
   bool loadingSummary = true;
@@ -169,6 +173,7 @@ class _ManagementPageState extends State<ManagementPage> {
       batches = const [];
       accounts = const [];
       auditEntries = const [];
+      metrics = null;
       openCode = null;
       openBatch = null;
       summary = null;
@@ -213,7 +218,69 @@ class _ManagementPageState extends State<ManagementPage> {
       _loadChain(),
       if (_can('manageUsers')) _loadAccounts(),
       if (_can('viewAudit')) _loadAudit(),
+      _loadMetrics(),
     ]);
+  }
+
+  Future<void> _loadMetrics() async {
+    setState(() => loadingMetrics = true);
+    try {
+      final report = await api.metrics();
+      if (mounted) setState(() => metrics = report);
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    } finally {
+      if (mounted) setState(() => loadingMetrics = false);
+    }
+  }
+
+  Future<void> _saveMetric({ReportedMetric? existing}) async {
+    final draft = await showDialog<MetricDraft>(
+      context: context,
+      builder: (_) => MetricDialog(existing: existing),
+    );
+    if (draft == null) return;
+    try {
+      await api.saveMetric(
+        key: draft.key,
+        label: draft.label,
+        value: draft.value,
+        source: draft.source,
+        note: draft.note,
+      );
+      _notify('Đã lưu chỉ số.');
+      await _loadMetrics();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
+  }
+
+  Future<void> _deleteMetric(ReportedMetric metric) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Xoá chỉ số'),
+        content: Text('Xoá "${metric.label}" khỏi trang Chỉ số?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('Thôi'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('Xoá'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      await api.deleteMetric(metric.key);
+      _notify('Đã xoá chỉ số.');
+      await _loadMetrics();
+    } on TraceApiFailure catch (error) {
+      _fail(error);
+    }
   }
 
   Future<void> _loadAccounts() async {
@@ -544,6 +611,15 @@ class _ManagementPageState extends State<ManagementPage> {
                         onCreate: _createAccount,
                         onToggleActive: _toggleAccount,
                         onResetPassword: _resetAccountPassword,
+                      )
+                    else if (section == AdminSection.metrics)
+                      MetricsPanel(
+                        report: metrics,
+                        loading: loadingMetrics,
+                        canEdit: _can('manageMetrics'),
+                        onAdd: _saveMetric,
+                        onEdit: (metric) => _saveMetric(existing: metric),
+                        onDelete: _deleteMetric,
                       )
                     else if (section == AdminSection.audit)
                       AuditPanel(

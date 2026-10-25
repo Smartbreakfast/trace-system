@@ -930,3 +930,93 @@ class AuditEntry {
     _ => action,
   };
 }
+
+/// Lượt mở hồ sơ của một lô. Hệ thống tự đếm, không kèm thông tin người xem.
+class BatchViews {
+  const BatchViews({
+    required this.code,
+    required this.name,
+    required this.views,
+    required this.firstAt,
+    required this.lastAt,
+  });
+
+  factory BatchViews.fromApi(Map<String, dynamic> json) => BatchViews(
+    code: (json['code'] ?? '').toString(),
+    name: (json['name'] ?? '').toString(),
+    views: (json['views'] as num?)?.toInt() ?? 0,
+    firstAt: (json['firstAt'] ?? '').toString(),
+    lastAt: (json['lastAt'] ?? '').toString(),
+  );
+
+  final String code;
+  final String name;
+  final int views;
+  final String firstAt;
+  final String lastAt;
+}
+
+/// Chỉ số do cơ sở sản xuất khai. Luôn đi kèm nguồn: một con số không nói được
+/// nó lấy ở đâu thì không dùng cho báo cáo được.
+class ReportedMetric {
+  const ReportedMetric({
+    required this.key,
+    required this.label,
+    required this.value,
+    required this.source,
+    required this.note,
+    required this.updatedAt,
+    required this.updatedBy,
+  });
+
+  factory ReportedMetric.fromApi(Map<String, dynamic> json) => ReportedMetric(
+    key: (json['key'] ?? '').toString(),
+    label: (json['label'] ?? '').toString(),
+    value: (json['value'] ?? '').toString(),
+    source: (json['source'] ?? '').toString(),
+    note: (json['note'] ?? '').toString(),
+    updatedAt: (json['updatedAt'] ?? '').toString(),
+    updatedBy: (json['updatedBy'] ?? '').toString(),
+  );
+
+  final String key;
+  final String label;
+  final String value;
+  final String source;
+  final String note;
+  final String updatedAt;
+  final String updatedBy;
+}
+
+/// Hai nửa của trang Chỉ số: nửa hệ thống đo được và nửa phải hỏi cơ sở.
+class MetricsReport {
+  const MetricsReport({
+    required this.totalViews,
+    required this.byBatch,
+    required this.reported,
+  });
+
+  factory MetricsReport.fromApi(Map<String, dynamic> json) {
+    final views = json['views'];
+    final list = views is Map<String, dynamic> ? views['byBatch'] : null;
+    return MetricsReport(
+      totalViews: views is Map<String, dynamic>
+          ? (views['total'] as num?)?.toInt() ?? 0
+          : 0,
+      byBatch: [
+        if (list is List)
+          for (final item in list)
+            if (item is Map<String, dynamic>) BatchViews.fromApi(item),
+      ],
+      reported: [
+        if (json['reported'] is List)
+          for (final item in json['reported'] as List)
+            if (item is Map<String, dynamic>) ReportedMetric.fromApi(item),
+      ],
+    );
+  }
+
+  final int totalViews;
+  final List<BatchViews> byBatch;
+  final List<ReportedMetric> reported;
+}

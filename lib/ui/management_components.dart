@@ -11,12 +11,13 @@ import 'shared_components.dart';
 /// Chỉ còn hai mục. Trước đây "Lô sản phẩm", "Nguyên liệu" và "Tính toàn vẹn"
 /// là ba tab tách rời, nên tạo một lô phải chạy qua lại giữa chúng và mỗi tab
 /// lại có một cách nhập khác nhau cho cùng một thứ.
-enum AdminSection { overview, batches, accounts, audit }
+enum AdminSection { overview, batches, metrics, accounts, audit }
 
 extension AdminSectionMeta on AdminSection {
   String get label => switch (this) {
     AdminSection.overview => 'Tổng quan',
     AdminSection.batches => 'Lô sản phẩm',
+    AdminSection.metrics => 'Chỉ số',
     AdminSection.accounts => 'Tài khoản',
     AdminSection.audit => 'Nhật ký',
   };
@@ -24,6 +25,7 @@ extension AdminSectionMeta on AdminSection {
   IconData get icon => switch (this) {
     AdminSection.overview => Icons.grid_view_rounded,
     AdminSection.batches => Icons.inventory_2_outlined,
+    AdminSection.metrics => Icons.insights_outlined,
     AdminSection.accounts => Icons.group_outlined,
     AdminSection.audit => Icons.history,
   };

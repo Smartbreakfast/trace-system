@@ -488,6 +488,68 @@ check(
 );
 
 console.log('');
+console.log('11. Chỉ số báo cáo');
+
+const metricKey = `thu-chi-so-${stamp}`;
+// Đến đây hai phiên của cơ sở Tú Lệ đã chết (mục 7 khoá tài khoản, mục 8 đổi
+// mật khẩu), nên dùng phiên của cơ sở trâu làm đại diện cho vai trò phụ trách.
+const facilityMetric = await call(
+  sessions.trauFacility,
+  'PUT',
+  `/api/admin/metrics/${metricKey}`,
+  { label: 'Thử', value: '1', source: 'thử' },
+);
+check(
+  'phụ trách cơ sở không khai được chỉ số',
+  facilityMetric.status === 403,
+  `status ${facilityMetric.status}`,
+);
+
+const noSource = await call(TOKEN, 'PUT', `/api/admin/metrics/${metricKey}`, {
+  label: 'Thiếu nguồn',
+  value: '1315',
+  source: '',
+});
+check(
+  'không lưu được chỉ số không ghi nguồn',
+  noSource.status === 400,
+  `status ${noSource.status}`,
+);
+
+const saved = await call(TOKEN, 'PUT', `/api/admin/metrics/${metricKey}`, {
+  label: 'Chỉ số thử',
+  value: '1315',
+  source: 'Phiếu khảo sát thử',
+});
+check('quản trị khai được chỉ số có nguồn', saved.status === 200);
+
+const listed = await call(TOKEN, 'GET', '/api/admin/metrics');
+const metricRows = listed.data?.reported ?? [];
+check(
+  'chỉ số hiện ra kèm đúng nguồn đã ghi',
+  metricRows.some((row) => row.key === metricKey && row.source === 'Phiếu khảo sát thử'),
+);
+
+// Lượt mở hồ sơ: đếm tăng đúng một, và endpoint công khai không cần đăng nhập.
+const before = (await call(TOKEN, 'GET', '/api/admin/metrics')).data.views.total;
+await call(null, 'POST', `/api/public/traces/${CODE}/view`);
+const after = (await call(TOKEN, 'GET', '/api/admin/metrics')).data.views.total;
+check(
+  'mở hồ sơ cộng đúng một lượt, không cần đăng nhập',
+  after === before + 1,
+  `${before} -> ${after}`,
+);
+
+const trauViews = await call(sessions.trauFacility, 'GET', '/api/admin/metrics');
+check(
+  'phụ trách cơ sở này không thấy lượt xem lô của cơ sở kia',
+  trauViews.status === 200 &&
+    !(trauViews.data.views.byBatch ?? []).some((row) => row.code === CODE),
+);
+
+await call(TOKEN, 'DELETE', `/api/admin/metrics/${metricKey}`);
+
+console.log('');
 // Dọn: khoá hai tài khoản thử còn lại để bản local không còn cửa mở.
 for (const account of Object.values(accounts)) {
   const row = (await call(TOKEN, 'GET', '/api/admin/users')).data.find(
