@@ -575,6 +575,7 @@ assets/         Phông chữ, ảnh nguyên liệu, ảnh sản phẩm
 | RB-10 | Nhật ký thao tác, đánh giá của người mua, lượt mở hồ sơ và chỉ số báo cáo đều nằm ngoài payload công bố, để không làm đổi mã băm của lô đã neo |
 | RB-11 | Bộ đếm lượt mở hồ sơ chỉ lưu một con số cho mỗi lô: không IP, không mã thiết bị, không thời điểm từng lượt |
 | RB-12 | Mỗi chỉ số do cơ sở khai phải ghi nguồn; máy chủ từ chối bản ghi để trống ô nguồn |
+| RB-13 | Thêm một cơ sở sản xuất chỉ làm bằng migration, không có đường API: thêm cơ sở là mở thêm một vùng dữ liệu mà người phụ trách cơ sở đó sẽ thấy, nên nó không phải thao tác hằng ngày. Mã sản phẩm nguyên liệu cũng vậy, vì API không khai được `product_kind` |
 
 ## 10. Yêu cầu phi chức năng
 

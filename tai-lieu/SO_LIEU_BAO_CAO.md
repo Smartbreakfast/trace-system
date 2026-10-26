@@ -1,6 +1,7 @@
 # Số liệu hệ thống Tú Lệ Trace cho báo cáo
 
-Chốt ngày **21/10/2026**, bổ sung mục Chỉ số ngày **25/10/2026**. Mọi con số
+Chốt ngày **21/10/2026**, bổ sung mục Chỉ số ngày **25/10/2026**, bổ sung cơ
+sở thứ ba và dòng ô mai táo mèo ngày **26/10/2026**. Mọi con số
 dưới đây đọc thẳng từ hệ thống đang chạy, trừ những dòng ghi rõ là do cơ sở sản
 xuất cung cấp; mục 5 ghi cách lấy lại để kiểm.
 
@@ -8,20 +9,24 @@ xuất cung cấp; mục 5 ghi cách lấy lại để kiểm.
 
 | Chỉ số | Kết quả | Nguồn số liệu |
 |---|---|---|
-| Số khách hàng (cơ sở sản xuất) | 2 cơ sở: Trung tâm Phát triển và Giao dịch Công nghệ thành phố Hà Nội (Tú Lệ Smart Breakfast) và Cơ sở chế biến vùng cao (thịt trâu gác bếp), mỗi bên 4 lô | Trang truy xuất công khai, 21/10/2026 |
-| Số sản phẩm đưa lên hệ thống | 9 mã trong danh mục: 4 mã thành phẩm (bột Tú Lệ dạng hộp, gói 30 g, hộp quà; thịt trâu gác bếp) và 5 mã nguyên liệu (cốm Tú Lệ, lạc đỏ Lục Yên, chuối tiêu xanh Bảo Thắng, khoai môn Lục Yên, thịt trâu tươi) | Danh mục sản phẩm trên hệ thống, 21/10/2026 |
-| Số lô đưa lên hệ thống | 12 lô, trong đó **8 lô đã công bố** (7 lô thành phẩm, 1 lô nguyên liệu) và 4 lô nguyên liệu còn ở trạng thái nháp | Trang truy xuất công khai, 21/10/2026 |
-| Số lô đã neo lên blockchain | **8 lô**, cả 8 đều ĐÃ XÁC MINH và có giao dịch đã được xác nhận trên mạng VBSN (chainId 84001) | Đo trên mạng VBSN, 21/10/2026 |
-| Số nguyên liệu đã khai báo | 19 lô nguyên liệu, 73 công đoạn, 128 tệp ảnh và tài liệu | Thống kê quản trị, 21/10/2026 |
+| Số khách hàng (cơ sở sản xuất) | **3 cơ sở**: Trung tâm Phát triển và Giao dịch Công nghệ thành phố Hà Nội (Tú Lệ Smart Breakfast), Cơ sở chế biến vùng cao (thịt trâu gác bếp) và Hợp tác xã chế biến, kinh doanh tổng hợp Đoàn Lương (ô mai táo mèo) | Trang `/chi-so`, 26/10/2026 |
+| Số sản phẩm đưa lên hệ thống | 11 mã trong danh mục: 5 mã thành phẩm (bột Tú Lệ dạng hộp, gói 30 g, hộp quà; thịt trâu gác bếp; ô mai táo mèo) và 6 mã nguyên liệu (cốm Tú Lệ, lạc đỏ Lục Yên, chuối tiêu xanh Bảo Thắng, khoai môn Lục Yên, thịt trâu tươi, quả táo mèo tươi). Người mua nhìn thấy **3 dòng sản phẩm** | Danh mục sản phẩm trên hệ thống, 26/10/2026 |
+| Số lô đưa lên hệ thống | 16 lô, trong đó **11 lô đã công bố** (10 lô thành phẩm, 1 lô nguyên liệu) và 5 lô nguyên liệu còn ở trạng thái nháp | Trang `/chi-so`, 26/10/2026 |
+| Số lô đã neo lên blockchain | **11 lô**, cả 11 đều ĐÃ XÁC MINH và có giao dịch đã được xác nhận trên mạng VBSN (chainId 84001) | Đo trên mạng VBSN, 26/10/2026 |
+| Số nguyên liệu đã khai báo | 22 lô nguyên liệu, 91 công đoạn, 149 tệp ảnh và tài liệu | Thống kê quản trị, 26/10/2026 |
 
 Hai chỗ khác với bản nháp đang có trong báo cáo:
 
 - **Số lô đã neo là 8, không phải 6.** Con số 6 là do trang chủ chỉ liệt kê 6 lô
   gần nhất. Hai lô `TL-2026-001` và `TL-2026-002` cũng đã neo, khối 5.783.872 và
   5.783.848.
-- **"2 sản phẩm" nên viết rõ là 2 dòng sản phẩm** (bột ngũ cốc Tú Lệ và thịt
-  trâu gác bếp). Danh mục thật có 9 mã, vì mỗi quy cách đóng gói và mỗi nguyên
-  liệu đều là một mã riêng để truy xuất ngược được.
+- **"2 sản phẩm" nên viết rõ là dòng sản phẩm.** Từ 26/10/2026 có 3 dòng: bột
+  ngũ cốc Tú Lệ, thịt trâu gác bếp và ô mai táo mèo. Danh mục thật có 11 mã, vì
+  mỗi quy cách đóng gói và mỗi nguyên liệu đều là một mã riêng để truy xuất
+  ngược được.
+- **Cơ sở thứ ba vào hệ thống ngày 26/10/2026**: Hợp tác xã chế biến, kinh doanh
+  tổng hợp Đoàn Lương, với 3 lô ô mai táo mèo `TM-2026-001`, `TM-2026-002`,
+  `TM-2026-003`. Mọi con số "2 cơ sở" trong bản nháp báo cáo phải sửa thành 3.
 
 ## 2. Bảng người sử dụng
 
@@ -184,3 +189,27 @@ python tools/nhap_khao_sat.py phieu.csv --production
 Tệp CSV cần năm cột `ma_lo,so_sao,nhan_xet,ten,ngay`; hai cột cuối để trống
 được. Nhập xong chạy `GET /api/admin/ratings` để lấy tổng, trung bình và phần
 tách theo nguồn, rồi cập nhật lại mục 2 và mục 3.2 của tài liệu này.
+
+### Dòng ô mai táo mèo - đâu là thật, đâu là dựng
+
+Cơ sở là thật: **Hợp tác xã chế biến, kinh doanh tổng hợp Đoàn Lương**, địa chỉ
+chép đúng theo giấy chứng nhận OCOP 2023 của chính hợp tác xã. Tên sản phẩm,
+quy cách hũ 200 g và toàn bộ ảnh cũng là của hợp tác xã; chú thích từng ảnh ghi
+rõ "ảnh tư liệu" chứ không nói là ảnh chụp tại lô đó.
+
+Ba điều phải nhớ trước khi đưa dòng này vào báo cáo:
+
+1. **Mã lô, ngày sản xuất và khối lượng từng công đoạn là dựng**, đúng như dòng
+   thịt trâu gác bếp. Khi hợp tác xã gửi sổ sản xuất thật thì sửa bảng `LOTS` và
+   phần `STEPS` trong `tools/seed_tao_meo.py` rồi chạy lại, đừng sửa tay trong
+   màn quản trị.
+2. **Ba giấy OCOP của hợp tác xã chưa đưa lên hệ thống.** Giấy ghi "có giá trị
+   36 tháng kể từ ngày ký Quyết định 4357/QĐ-UBND ngày 21/8/2023", tức đã hết
+   hiệu lực từ 21/8/2026. Đăng một tờ giấy hết hạn như minh chứng còn hiệu lực
+   là đúng loại lỗi hội đồng sẽ bắt. Xin hợp tác xã bản gia hạn rồi mới đăng.
+3. **Địa chỉ có thể đã đổi.** Giấy 2023 ghi "xã Văn Phú, thành phố Yên Bái, tỉnh
+   Yên Bái"; sau đợt sắp xếp đơn vị hành chính, địa danh này có thể đã thuộc
+   tỉnh Lào Cai. Hỏi lại hợp tác xã rồi sửa, đừng tự suy.
+
+Cơ sở mới chưa có tài khoản riêng, nên hiện chỉ quản trị mới khai báo được cho
+dòng này. Tạo tài khoản phụ trách cơ sở khi hợp tác xã cử người nhập liệu.
