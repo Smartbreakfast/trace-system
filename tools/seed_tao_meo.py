@@ -72,6 +72,8 @@ RAW_LOT = {
 }
 
 # Ba mẻ, rải theo mùa táo mèo (quả chín từ khoảng tháng 8 đến tháng 10).
+# Mọi mốc thời gian phải nằm trong quá khứ so với ngày chạy seeder: hồ sơ
+# truy xuất là bản ghi việc đã làm, không phải lịch sản xuất.
 # `fresh` là khối lượng quả tươi đưa vào, tính bằng gam.
 LOTS = [
     {'code': 'TM-2026-001', 'name': 'Ô mai táo mèo - mẻ tháng 09',
@@ -80,9 +82,9 @@ LOTS = [
     {'code': 'TM-2026-002', 'name': 'Ô mai táo mèo - mẻ tháng 10',
      'production': '08.10.2026', 'expiry': '08.10.2027',
      'harvest': '03.10.2026', 'received': '04.10.2026', 'fresh': 45000},
-    {'code': 'TM-2026-003', 'name': 'Ô mai táo mèo - mẻ tháng 11',
-     'production': '05.11.2026', 'expiry': '05.11.2027',
-     'harvest': '31.10.2026', 'received': '01.11.2026', 'fresh': 36000},
+    {'code': 'TM-2026-003', 'name': 'Ô mai táo mèo - mẻ cuối tháng 10',
+     'production': '22.10.2026', 'expiry': '22.10.2027',
+     'harvest': '17.10.2026', 'received': '18.10.2026', 'fresh': 36000},
 ]
 
 INGREDIENT = {
