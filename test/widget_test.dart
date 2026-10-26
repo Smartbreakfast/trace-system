@@ -8,6 +8,7 @@ import 'package:com_tule/main.dart';
 import 'package:com_tule/models/trace_models.dart';
 import 'package:com_tule/pages/explorer_page.dart';
 import 'package:com_tule/pages/management_page.dart';
+import 'package:com_tule/pages/metrics_page.dart';
 import 'package:com_tule/ui/shared_components.dart';
 import 'package:com_tule/ui/sourcing_section.dart';
 import 'package:com_tule/ui/explorer_chrome.dart';
@@ -1757,5 +1758,76 @@ void main() {
     // 403 không được hiểu là hết phiên: người dùng vẫn ở trong Management.
     expect(find.text('Đăng nhập quản trị'), findsNothing);
     expect(find.text('Tổng quan'), findsWidgets);
+  });
+
+  testWidgets('trang chỉ số công khai in nguồn dưới từng con số', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = _api(
+      MockClient((request) async {
+        if (!request.url.path.contains('/public/metrics')) {
+          return _json({'error': 'NOT_FOUND'}, status: 404);
+        }
+        return _json({
+          'counted': {
+            'facilities': 2,
+            'products': 2,
+            'batches': 8,
+            'finishedBatches': 7,
+            'ingredientBatches': 1,
+            'anchored': 8,
+            'ratings': 27,
+            'average': 4.56,
+            'views': 15,
+          },
+          'reported': [
+            {
+              'key': 'nguoi-su-dung',
+              'label': 'Số người sử dụng sản phẩm',
+              'value': '1.315 người',
+              'source': 'Danh sách khách hàng và phiếu khảo sát của cơ sở',
+              'note': '',
+            },
+          ],
+        });
+      }),
+    );
+
+    await tester.pumpWidget(
+      TuleTraceApp(
+        router: GoRouter(
+          initialLocation: '/chi-so',
+          routes: [
+            GoRoute(path: '/chi-so', builder: (_, _) => MetricsPage(api: api)),
+          ],
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    // Hai nửa phải tách rõ: số máy đếm và số cơ sở khai không được trộn.
+    expect(find.text('Hệ thống tự đếm'), findsOneWidget);
+    expect(find.text('Cơ sở sản xuất cung cấp'), findsOneWidget);
+
+    // Bảng dựng đúng theo bảng trong báo cáo.
+    expect(find.text('2 sản phẩm; 8 lô (7 lô thành phẩm, 1 lô nguyên liệu)'),
+        findsOneWidget);
+    expect(find.text('8 lô, giao dịch đã được xác nhận'), findsOneWidget);
+    expect(find.text('27 lượt; trung bình 4,56/5 sao'), findsOneWidget);
+    expect(find.text('1.315 người'), findsOneWidget);
+
+    // Số do cơ sở khai luôn đi kèm nguồn, ngay dưới con số.
+    expect(
+      find.text('Nguồn: Danh sách khách hàng và phiếu khảo sát của cơ sở'),
+      findsOneWidget,
+    );
+
+    // Bộ đếm phải gọi là lượt, không phải người: hệ thống không đếm người được.
+    expect(find.text('Lượt mở hồ sơ truy xuất'), findsOneWidget);
+    expect(find.text('15 lượt'), findsOneWidget);
   });
 }

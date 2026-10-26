@@ -1020,3 +1020,59 @@ class MetricsReport {
   final List<BatchViews> byBatch;
   final List<ReportedMetric> reported;
 }
+
+/// Bảng chỉ số công khai, đúng theo bảng trong báo cáo đề tài.
+///
+/// [counted] là phần hệ thống tự đếm, [reported] là phần cơ sở sản xuất khai.
+/// Giao diện phải giữ nguyên ranh giới đó: một con số do người khai mà trình
+/// bày như số máy đo được thì cả bảng mất giá trị làm bằng chứng.
+class PublicMetrics {
+  const PublicMetrics({
+    required this.facilities,
+    required this.products,
+    required this.batches,
+    required this.finishedBatches,
+    required this.ingredientBatches,
+    required this.anchored,
+    required this.ratings,
+    required this.average,
+    required this.views,
+    required this.reported,
+  });
+
+  factory PublicMetrics.fromApi(Map<String, dynamic> json) {
+    final counted = json['counted'];
+    int number(String key) => counted is Map<String, dynamic>
+        ? (counted[key] as num?)?.toInt() ?? 0
+        : 0;
+    return PublicMetrics(
+      facilities: number('facilities'),
+      products: number('products'),
+      batches: number('batches'),
+      finishedBatches: number('finishedBatches'),
+      ingredientBatches: number('ingredientBatches'),
+      anchored: number('anchored'),
+      ratings: number('ratings'),
+      average: counted is Map<String, dynamic>
+          ? (counted['average'] as num?)?.toDouble() ?? 0
+          : 0,
+      views: number('views'),
+      reported: [
+        if (json['reported'] is List)
+          for (final item in json['reported'] as List)
+            if (item is Map<String, dynamic>) ReportedMetric.fromApi(item),
+      ],
+    );
+  }
+
+  final int facilities;
+  final int products;
+  final int batches;
+  final int finishedBatches;
+  final int ingredientBatches;
+  final int anchored;
+  final int ratings;
+  final double average;
+  final int views;
+  final List<ReportedMetric> reported;
+}

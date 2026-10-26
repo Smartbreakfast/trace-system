@@ -32,11 +32,17 @@ Hai chỗ khác với bản nháp đang có trong báo cáo:
 | Số lượt truy xuất | **1.806 lượt**, từ 21/09/2026 đến 21/10/2026, 0 lỗi, trên tên miền `trace.smartbreakfast.store`. Từ 25/10/2026 hệ thống tự đếm tiếp, xem mục **Chỉ số** | Thống kê truy cập Cloudflare (giai đoạn trước); bộ đếm của hệ thống (từ 25/10/2026) |
 | Đánh giá của người sử dụng | **27 lượt**, trung bình **4,56/5 sao**, trong đó 93% cho từ 4 sao trở lên, không có lượt nào dưới 3 sao | Mục đánh giá trên trang truy xuất, 21/10/2026 |
 
-Ba dòng đầu đều mở được ngay trên màn quản trị, mục **Chỉ số**. Trang đó chia
-làm hai nửa và không trộn vào nhau: nửa trên là thứ hệ thống tự đếm, nửa dưới
-là thứ cơ sở sản xuất cung cấp, mỗi con số kèm đúng nguồn của nó. Người chấm hồ
-sơ hỏi "số này ở đâu ra" thì câu trả lời nằm ngay dưới con số, không phải đi
-tìm.
+Toàn bộ bảng này xem được tại **https://trace.smartbreakfast.store/chi-so**,
+không cần đăng nhập. Nên dẫn thẳng địa chỉ đó trong báo cáo: người chấm gõ vào
+trình duyệt là đối chiếu được từng dòng với hệ thống đang chạy, thay vì phải
+tin con số in trên giấy. Cùng bảng đó còn nằm ở mục **Chỉ số** của màn quản trị
+cho người khai số.
+
+Trang chia làm hai nửa và không trộn vào nhau: nửa trên là thứ hệ thống tự đếm
+(số cơ sở, số sản phẩm và lô, số lô đã neo, số lượt đánh giá, lượt mở hồ sơ) —
+không ai khai tay được, kể cả quản trị; nửa dưới là thứ cơ sở sản xuất cung cấp,
+mỗi con số kèm đúng nguồn của nó. Người chấm hồ sơ hỏi "số này ở đâu ra" thì câu
+trả lời nằm ngay dưới con số, không phải đi tìm.
 
 Riêng dòng **số người sử dụng sản phẩm**: đây là số của cơ sở sản xuất, không
 phải số hệ thống đếm được. Hệ thống cố ý không bắt người mua đăng ký nên không
@@ -152,6 +158,7 @@ Ba cách lấy lại hoặc làm cho số sạch hơn:
 
 | Việc | Cách làm |
 |---|---|
+| Cả bảng chỉ số, không cần đăng nhập | `https://trace.smartbreakfast.store/chi-so` (hoặc `GET /api/public/metrics` nếu cần số thô) |
 | Lô đã công bố và trạng thái từng lô | `https://trace.smartbreakfast.store/api/public/batches?limit=20` |
 | Kiểm chứng một lô, kèm mã giao dịch | `https://trace.smartbreakfast.store/api/public/traces/TL-2026-004/verify` |
 | Điểm đánh giá của một lô | Cuối trang `https://trace.smartbreakfast.store/t/TL-2026-004` |

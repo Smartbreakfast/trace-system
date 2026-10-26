@@ -180,6 +180,15 @@ app.get('/api/public/catalog', async (c) =>
 
 app.get('/api/public/featured', async (c) => c.json(await trace.featured(c.env.DB)));
 
+/**
+ * Bảng chỉ số của đề tài, mở cho mọi người xem: người chấm hồ sơ cần đối chiếu
+ * con số trong báo cáo với hệ thống đang chạy mà không phải xin tài khoản.
+ * Chỉ đọc, không tham số, không ghi lại gì về người xem.
+ */
+app.get('/api/public/metrics', async (c) =>
+  c.json(await trace.publicMetrics(c.env.DB)),
+);
+
 app.get('/api/public/traces/:code', async (c) =>
   c.json(await trace.publicTrace(c.env.DB, c.req.param('code'), c.env)),
 );

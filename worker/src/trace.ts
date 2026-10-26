@@ -1633,3 +1633,64 @@ export async function deleteReportedMetric(db: D1Database, key: string) {
     .run();
   return { key, deleted: Number(result.meta?.changes ?? 0) };
 }
+
+/**
+ * Bảng chỉ số công khai, dựng đúng theo bảng trong báo cáo đề tài.
+ *
+ * Hai nhóm tách bạch và KHÔNG được trộn vào nhau:
+ *  - `counted`: hệ thống tự đếm từ chính dữ liệu đang chạy. Không ai khai tay
+ *    được, kể cả quản trị. Người chấm mở trang này rồi đếm lại trên trang truy
+ *    xuất phải ra cùng con số.
+ *  - `reported`: cơ sở sản xuất khai, hệ thống chỉ chép lại. Vì thế mỗi dòng
+ *    bắt buộc đi kèm nguồn, và giao diện phải in nguồn ngay dưới con số.
+ *
+ * Trang này không nhận tham số và không lưu gì về người xem.
+ */
+export async function publicMetrics(db: D1Database) {
+  const row = await first(
+    db,
+    `SELECT
+       (SELECT COUNT(*) FROM facilities) AS facilities,
+       (SELECT COUNT(*) FROM products
+         WHERE status = 'ACTIVE' AND product_kind = 'finished') AS products,
+       (SELECT COUNT(*) FROM product_batches
+         WHERE status = 'PUBLISHED') AS batches,
+       (SELECT COUNT(*) FROM product_batches b
+          JOIN products c ON c.id = b.product_id
+         WHERE b.status = 'PUBLISHED'
+           AND c.product_kind = 'finished') AS finishedBatches,
+       (SELECT COUNT(*) FROM product_batches b
+          JOIN products c ON c.id = b.product_id
+         WHERE b.status = 'PUBLISHED'
+           AND c.product_kind = 'ingredient') AS ingredientBatches,
+       (SELECT COUNT(DISTINCT s.product_batch_id)
+          FROM published_snapshots s
+          JOIN blockchain_outbox o ON o.snapshot_id = s.id
+         WHERE o.status = 'CONFIRMED') AS anchored,
+       (SELECT COUNT(*) FROM batch_ratings) AS ratings,
+       (SELECT AVG(stars) FROM batch_ratings) AS average,
+       (SELECT COALESCE(SUM(views), 0) FROM batch_views) AS views`,
+  );
+  const ratings = Number(row?.ratings ?? 0);
+  return {
+    counted: {
+      facilities: Number(row?.facilities ?? 0),
+      products: Number(row?.products ?? 0),
+      batches: Number(row?.batches ?? 0),
+      finishedBatches: Number(row?.finishedBatches ?? 0),
+      ingredientBatches: Number(row?.ingredientBatches ?? 0),
+      anchored: Number(row?.anchored ?? 0),
+      ratings,
+      // Làm tròn hai số lẻ ngay tại đây để mọi nơi hiện cùng một con số.
+      average: ratings === 0 ? 0 : Math.round(Number(row?.average ?? 0) * 100) / 100,
+      views: Number(row?.views ?? 0),
+    },
+    reported: (await listReportedMetrics(db)).map((metric) => ({
+      key: metric.key,
+      label: metric.label,
+      value: metric.value,
+      source: metric.source,
+      note: metric.note,
+    })),
+  };
+}

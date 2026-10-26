@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'app/nav.dart';
 import 'app/url_strategy.dart';
 import 'pages/explorer_page.dart';
+import 'pages/metrics_page.dart';
 import 'pages/management_page.dart';
 import 'ui/shared_components.dart';
 
@@ -51,6 +52,14 @@ final tuleRouter = GoRouter(
         demo: state.uri.queryParameters['demo'] == '1',
       ),
     ),
+    // Bảng chỉ số của đề tài. Chỉ có trên bản web: nó là trang để đối chiếu
+    // báo cáo, không phải thứ người mua cần khi quét mã ngoài chợ.
+    if (kIsWeb)
+      GoRoute(
+        path: '/chi-so',
+        name: 'metrics',
+        builder: (context, state) => const MetricsPage(),
+      ),
     // Màn quản trị chỉ có trên bản web. Ứng dụng di động là công cụ của người
     // mua: quét mã, đọc hồ sơ, xem lại lô đã quét. Không nhập liệu, không đăng
     // nhập, nên cũng không có gì để lọt vào tay người tải app từ cửa hàng.

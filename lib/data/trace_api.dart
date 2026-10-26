@@ -15,6 +15,7 @@ import '../models/trace_models.dart'
         BatchRef,
         MetricsReport,
         ProductCatalog,
+        PublicMetrics,
         PublicProduct,
         RatingSummary;
 
@@ -410,6 +411,16 @@ class TraceApi {
       for (final item in data)
         if (item is Map<String, dynamic>) PublicProduct.fromApi(item),
     ];
+  }
+
+  /// Bảng chỉ số công khai. Không cần đăng nhập: người chấm hồ sơ phải đối
+  /// chiếu được số trong báo cáo với hệ thống đang chạy.
+  Future<PublicMetrics> publicMetrics() async {
+    final data = await _send(() => _client.get(_uri('/public/metrics')));
+    if (data is! Map<String, dynamic>) {
+      throw const TraceUnreachable('Không đọc được bảng chỉ số.');
+    }
+    return PublicMetrics.fromApi(data);
   }
 
   Future<List<ProductCatalog>> listProducts() async {

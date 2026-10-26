@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../models/trace_models.dart';
@@ -854,10 +855,28 @@ class ExplorerFooter extends StatelessWidget {
       ],
     );
 
-    const right = Text(
-      'Kết nối giá trị từ những vùng đất lành',
-      style: TextStyle(fontSize: 12.5, color: brandMuted),
-    );
+    // Trên bản web, chân trang mang thêm một lối vào bảng chỉ số: người đọc
+    // báo cáo cần đối chiếu số liệu mà không phải xin tài khoản.
+    final right = kIsWeb
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _FooterLink(label: 'Chỉ số hệ thống', path: '/chi-so'),
+              const SizedBox(width: 14),
+              // Khung hẹp thì cắt bớt khẩu hiệu chứ không đẩy tràn hàng.
+              const Flexible(
+                child: Text(
+                  'Kết nối giá trị từ những vùng đất lành',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: brandMuted),
+                ),
+              ),
+            ],
+          )
+        : const Text(
+            'Kết nối giá trị từ những vùng đất lành',
+            style: TextStyle(fontSize: 12.5, color: brandMuted),
+          );
 
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -867,7 +886,7 @@ class ExplorerFooter extends StatelessWidget {
                 Flexible(child: left),
                 const SizedBox(width: 16),
                 const Spacer(),
-                right,
+                Flexible(child: right),
               ],
             )
           : Column(
@@ -876,4 +895,28 @@ class ExplorerFooter extends StatelessWidget {
             ),
     );
   }
+}
+
+class _FooterLink extends StatelessWidget {
+  const _FooterLink({required this.label, required this.path});
+  final String label;
+  final String path;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: () => GoRouter.of(context).go(path),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: brandOrangeText,
+          decoration: TextDecoration.underline,
+          decorationColor: brandOrangeText,
+        ),
+      ),
+    ),
+  );
 }

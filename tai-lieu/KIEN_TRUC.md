@@ -328,6 +328,21 @@ Màn quản trị giữ nguyên ranh giới này: mục **Chỉ số** có hai p
 ràng, "hệ thống tự đếm" và "cơ sở sản xuất cung cấp". Trộn hai phần lại thì
 người đọc không còn phân biệt được số nào đo được, số nào do người khai.
 
+Ranh giới đó lặp lại ở cả hai nơi hiển thị:
+
+- `/admin` → mục **Chỉ số**: phải đăng nhập, dành cho người khai số. Quyền
+  `viewMetrics` cho quản trị và phụ trách cơ sở, `manageMetrics` chỉ quản trị.
+- `/chi-so`: trang công khai, không cần đăng nhập, chỉ đọc. Lý do mở công khai
+  là mục đích của nó: người đọc báo cáo gõ địa chỉ vào trình duyệt để đối chiếu
+  con số in trên giấy với hệ thống đang chạy. Bắt họ xin tài khoản thì bảng chỉ
+  số không còn là bằng chứng kiểm lại được nữa. Trang này gọi
+  `GET /api/public/metrics`, chỉ đọc, không nhận tham số, không ghi gì.
+
+Bốn dòng đầu của trang công khai hệ thống tự đếm được nên không ai sửa được:
+số cơ sở, số sản phẩm và lô, số lô đã neo (đếm `published_snapshots` có bản ghi
+`blockchain_outbox` ở trạng thái `CONFIRMED`), số lượt đánh giá và điểm trung
+bình. Hai dòng cuối là `batch_views` và `reported_metrics`.
+
 Cả hai bảng đều nằm ngoài `snapshotPayload`, cùng lý do với `batch_ratings` và
 `audit_log`.
 
@@ -452,6 +467,7 @@ Do khoá đặt theo nội dung, tải lên cùng một tệp nhiều lần ch�
 | GET | `/api/public/traces/{code}/verify` | Kết quả kiểm chứng công khai |
 | POST | `/api/public/traces/{code}/ratings` | Gửi đánh giá: `stars` 1..5, `deviceId`, tuỳ chọn `comment`, `displayName` |
 | POST | `/api/public/traces/{code}/view` | Cộng một lượt mở hồ sơ. Không nhận và không lưu thông tin nào về người xem |
+| GET | `/api/public/metrics` | Bảng chỉ số của đề tài: phần hệ thống tự đếm và phần cơ sở khai, mỗi dòng kèm nguồn |
 | GET | `/api/media/media/{sha256}.{ext}` | Tệp đính kèm |
 
 ### 7.2 Đăng nhập
