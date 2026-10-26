@@ -863,13 +863,9 @@ class ExplorerFooter extends StatelessWidget {
             children: [
               const _FooterLink(label: 'Chỉ số hệ thống', path: '/chi-so'),
               const SizedBox(width: 14),
-              // Khung hẹp thì cắt bớt khẩu hiệu chứ không đẩy tràn hàng.
-              const Flexible(
-                child: Text(
-                  'Kết nối giá trị từ những vùng đất lành',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, color: brandMuted),
-                ),
+              const Text(
+                'Kết nối giá trị từ những vùng đất lành',
+                style: TextStyle(fontSize: 12.5, color: brandMuted),
               ),
             ],
           )
@@ -878,20 +874,29 @@ class ExplorerFooter extends StatelessWidget {
             style: TextStyle(fontSize: 12.5, color: brandMuted),
           );
 
+    final stacked = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [left, const SizedBox(height: 8), right],
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 24),
-      child: wide
-          ? Row(
-              children: [
-                Flexible(child: left),
-                const SizedBox(width: 16),
-                const Spacer(),
-                Flexible(child: right),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [left, const SizedBox(height: 8), right],
+      // Màn hình rộng không có nghĩa là chân trang rộng: trang chỉ số bó nội
+      // dung ở 940px. Đo bề ngang thật rồi mới xếp một hàng, nếu không thì
+      // khẩu hiệu bị cắt cụt giữa chừng.
+      child: !wide
+          ? stacked
+          : LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth < 1040
+                  ? stacked
+                  : Row(
+                      children: [
+                        Flexible(child: left),
+                        const SizedBox(width: 16),
+                        const Spacer(),
+                        right,
+                      ],
+                    ),
             ),
     );
   }
