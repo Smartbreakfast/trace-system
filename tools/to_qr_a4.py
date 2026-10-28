@@ -7,7 +7,12 @@ chưa công bố thì không có trên trang truy xuất công khai nên cũng k
 
 Mã QR chỉ chứa địa chỉ công khai của lô, không chứa khoá hay mã đăng nhập nào.
 
-Chạy: python tools/to_qr_a4.py    → out/qr-a4.html và out/qr-a4.pdf
+Chạy: python tools/to_qr_a4.py          → out/qr-a4.html và out/qr-a4.pdf
+      python tools/to_qr_a4.py --docx   → thêm out/qr-a4.docx
+
+Bản .docx theo đúng khổ hồ sơ dự thi khoa học kỹ thuật như tools/md_sang_docx.py
+(A4, lề trái 3cm, phải 2cm, trên dưới 2cm, Times New Roman) để dán thẳng vào
+phụ lục báo cáo mà không phải chỉnh lại định dạng.
 """
 import base64
 import io
@@ -19,6 +24,11 @@ import urllib.request
 
 import qrcode
 import qrcode.image.svg
+from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -42,6 +52,13 @@ def qr_svg(text):
     buf = io.BytesIO()
     img.save(buf)
     return 'data:image/svg+xml;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+
+def qr_png(text, path):
+    """Mã QR dạng ảnh. Word không nhúng được SVG nên bản .docx phải dùng PNG;
+    để box_size cao cho ảnh đủ điểm ảnh, in ra giấy không bị răng cưa."""
+    qrcode.make(text, box_size=14, border=0).save(path)
+    return path
 
 
 def data_uri(path, mime):
@@ -88,6 +105,13 @@ def build():
         f.write(html)
     print('đã ghi', page, '-', lots, 'lô')
 
+    if '--docx' in sys.argv:
+        tmp = os.path.join(OUT, 'qr-png')
+        os.makedirs(tmp, exist_ok=True)
+        doc = os.path.join(OUT, 'qr-a4.docx')
+        build_docx(catalog, doc, tmp)
+        print('đã ghi', doc)
+
     pdf = os.path.join(OUT, 'qr-a4.pdf')
     try:
         subprocess.run([CHROME, '--headless', '--disable-gpu',
@@ -97,6 +121,91 @@ def build():
         print('đã ghi', pdf)
     except Exception as error:
         print('không dựng được PDF (%s); mở file html rồi Ctrl+P' % error)
+
+
+BODY_FONT = 'Times New Roman'
+INK = RGBColor(0x17, 0x35, 0x29)
+MUTED = RGBColor(0x5A, 0x65, 0x60)
+
+
+def chu(paragraph, text, size=13, bold=False, color=INK):
+    run = paragraph.add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+    run.font.color.rgb = color
+    return run
+
+
+def build_docx(catalog, path, tmp):
+    document = Document()
+    style = document.styles['Normal']
+    style.font.name = BODY_FONT
+    style.element.rPr.rFonts.set(qn('w:eastAsia'), BODY_FONT)
+    style.paragraph_format.space_after = Pt(4)
+    style.paragraph_format.line_spacing = 1.0
+    for section in document.sections:
+        section.left_margin, section.right_margin = Cm(3), Cm(2)
+        section.top_margin, section.bottom_margin = Cm(2), Cm(2)
+
+    title = document.add_paragraph()
+    chu(title, 'TÚ LỆ TRACE - MÃ QR TRUY XUẤT NGUỒN GỐC', size=14, bold=True)
+    sub = document.add_paragraph()
+    chu(sub, 'Quét mã trên mỗi lô để xem hồ sơ sản xuất của chính lô đó.',
+        size=12, color=MUTED)
+
+    # Địa chỉ website đứng riêng một bảng hai cột: mã QR bên trái, chữ bên phải.
+    web = document.add_table(rows=1, cols=2)
+    web.alignment = WD_TABLE_ALIGNMENT.LEFT
+    cell = web.rows[0].cells[0]
+    cell.width = Cm(4)
+    anh = cell.paragraphs[0]
+    anh.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    anh.add_run().add_picture(qr_png(SITE, os.path.join(tmp, 'site.png')),
+                              width=Cm(3.4))
+    cell = web.rows[0].cells[1]
+    cell.width = Cm(12)
+    chu(cell.paragraphs[0], 'Địa chỉ website', size=12, bold=True)
+    chu(cell.add_paragraph(), 'trace.smartbreakfast.store', size=14, bold=True)
+    chu(cell.add_paragraph(),
+        'Quét mã bên trái để mở trang tra cứu. Nhập mã lô in trên bao bì vào ô '
+        'tìm kiếm là ra hồ sơ, không cần tài khoản.', size=11, color=MUTED)
+
+    lots = 0
+    for product in catalog:
+        heading = document.add_paragraph()
+        heading.paragraph_format.space_before = Pt(10)
+        chu(heading, product['name'], size=13, bold=True)
+
+        batches = product['batches']
+        rows = (len(batches) + 3) // 4
+        table = document.add_table(rows=rows, cols=4)
+        table.alignment = WD_TABLE_ALIGNMENT.LEFT
+        for index, batch in enumerate(batches):
+            lots += 1
+            cell = table.rows[index // 4].cells[index % 4]
+            cell.width = Cm(4)
+            url = '%s/t/%s' % (SITE, batch['code'])
+            anh = cell.paragraphs[0]
+            anh.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            anh.add_run().add_picture(
+                qr_png(url, os.path.join(tmp, batch['code'] + '.png')),
+                width=Cm(3.4))
+            ma = cell.add_paragraph()
+            ma.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            chu(ma, batch['code'], size=11, bold=True)
+            ngay = cell.add_paragraph()
+            ngay.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            chu(ngay, batch.get('productionDate') or '', size=10, color=MUTED)
+
+    cuoi = document.add_paragraph()
+    cuoi.paragraph_format.space_before = Pt(12)
+    chu(cuoi, '%d lô đang công bố tại thời điểm in. Mỗi mã QR mở thẳng hồ sơ '
+        'của một lô: nguyên liệu, từng công đoạn kèm khối lượng vào ra, hình '
+        'ảnh và kết quả đối chiếu với bản ghi đã neo trên blockchain.' % lots,
+        size=11, color=MUTED)
+
+    document.save(path)
+    return lots
 
 
 TEMPLATE = """<!doctype html>
