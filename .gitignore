@@ -73,3 +73,6 @@ tai-lieu/*.pdf
 
 # Khoa ky ban phat hanh Android: duong dan va mat khau kho khoa.
 android/key.properties
+
+# Bản in dựng lại được bằng tools/to_qr_a4.py, không cần theo dõi.
+out/
