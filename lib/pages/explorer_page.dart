@@ -276,16 +276,18 @@ class _ExplorerPageState extends State<ExplorerPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Ô tra cứu hiện ở mọi trạng thái và luôn ở một chỗ, để nó
-                  // không nhảy giữa lúc chưa tra cứu và lúc có kết quả.
-                  TraceSearchBand(
-                    search: TraceSearch(
-                      dense: true,
-                      initialCode: widget.code ?? '',
-                      busy: phase == LoadPhase.loading,
-                      onSubmit: _openCode,
+                  // Trang chủ có ô tra cứu riêng nằm trong khối mở đầu, nên
+                  // dải này chỉ dựng ở các trạng thái còn lại. Để cả hai thì
+                  // trang chủ có hai ô tra cứu chồng nhau.
+                  if (phase != LoadPhase.idle)
+                    TraceSearchBand(
+                      search: TraceSearch(
+                        dense: true,
+                        initialCode: widget.code ?? '',
+                        busy: phase == LoadPhase.loading,
+                        onSubmit: _openCode,
+                      ),
                     ),
-                  ),
                   Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(

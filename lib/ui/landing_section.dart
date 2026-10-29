@@ -5,6 +5,7 @@ import '../data/trace_api.dart';
 import '../models/trace_models.dart';
 import 'explorer_chrome.dart';
 import 'shared_components.dart';
+import 'trace_components.dart';
 
 /// Trang chủ lúc chưa tra cứu lô nào.
 ///
@@ -36,23 +37,49 @@ class LandingSection extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: compact ? 14 : 26),
-          Text(
-            'Mỗi lô hàng một hồ sơ riêng',
-            style: compact
-                ? pageTitleStyle
-                : displayTitleStyle.copyWith(fontSize: 38, height: 1.15),
-          ),
-          const SizedBox(height: 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: const Text(
-              'Quét mã QR trên bao bì hoặc nhập mã lô để xem lô đó làm từ gì, '
-              'qua những công đoạn nào.',
-              style: TextStyle(fontSize: 16, color: brandMuted, height: 1.6),
+          SizedBox(height: compact ? 16 : 40),
+          // Khối mở đầu căn giữa còn lưới sản phẩm trải hết bề ngang. Căn trái
+          // thì nửa phải của nửa trên trang bỏ trống, trang đọc ra lệch hẳn
+          // một bên; màn hẹp thì ngược lại, căn trái mới dễ đọc.
+          Align(
+            alignment: compact ? Alignment.centerLeft : Alignment.center,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Column(
+                crossAxisAlignment: compact
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    'Mỗi lô hàng một hồ sơ riêng',
+                    textAlign: compact ? TextAlign.start : TextAlign.center,
+                    style: compact
+                        ? pageTitleStyle
+                        : displayTitleStyle.copyWith(fontSize: 40, height: 1.15),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Quét mã QR trên bao bì hoặc nhập mã lô để xem lô đó làm '
+                    'từ gì, qua những công đoạn nào.',
+                    textAlign: compact ? TextAlign.start : TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: brandMuted,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 540),
+                    child: TraceSearch(
+                      onSubmit: (code) => onOpenCode?.call(code),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          SizedBox(height: compact ? 30 : 44),
+          SizedBox(height: compact ? 34 : 56),
           Text('Sản phẩm trên hệ thống', style: sectionTitleStyle),
           const SizedBox(height: 16),
           _Grid(

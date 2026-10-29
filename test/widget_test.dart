@@ -505,10 +505,12 @@ void main() {
     expect(find.text('Đưa sản phẩm của bạn lên hệ thống'), findsOneWidget);
     expect(find.text('Liên hệ đăng ký'), findsOneWidget);
 
-    // Ô tra cứu ở navbar có mặt ở cả hai trạng thái, không nhảy chỗ.
+    // Trang chủ có đúng một ô tra cứu, nằm trong khối mở đầu chứ không phải
+    // dải căn giữa ở trên: hai ô chồng nhau thì không biết gõ vào đâu.
+    expect(find.byType(TraceSearchBand), findsNothing);
     expect(
       find.descendant(
-        of: find.byType(TraceSearchBand),
+        of: find.byType(LandingSection),
         matching: find.byType(TraceSearch),
       ),
       findsOneWidget,
@@ -520,17 +522,17 @@ void main() {
     await _settle(tester);
     expect(find.text('Tú Lệ Smart Breakfast'), findsNothing);
 
-    // Gõ vào ô trong navbar, đúng ô mà người dùng thấy ở cả hai trạng thái.
+    // Gõ vào ô tra cứu của trang chủ.
     await tester.enterText(
       find.descendant(
-        of: find.byType(TraceSearchBand),
+        of: find.byType(LandingSection),
         matching: find.byType(TextField),
       ),
       'tl-2026-001',
     );
     await tester.tap(
       find.descendant(
-        of: find.byType(TraceSearchBand),
+        of: find.byType(LandingSection),
         matching: find.text('Tra cứu'),
       ),
     );
