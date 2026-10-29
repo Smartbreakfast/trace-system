@@ -501,12 +501,9 @@ void main() {
     expect(find.text('Ô mai táo mèo Đoàn Lương'), findsOneWidget);
     expect(find.text('TL-2026-002'), findsOneWidget);
     expect(find.text('TM-2026-001'), findsOneWidget);
-    expect(find.text('2 dòng sản phẩm, 2 lô đã công bố. '
-        'Bấm một mã lô để mở hồ sơ của lô đó.'), findsOneWidget);
-
     // Lời mời cơ sở khác đăng ký dịch vụ truy xuất.
     expect(find.text('Đưa sản phẩm của bạn lên hệ thống'), findsOneWidget);
-    expect(find.text('Liên hệ để đăng ký'), findsOneWidget);
+    expect(find.text('Liên hệ đăng ký'), findsOneWidget);
 
     // Ô tra cứu ở navbar có mặt ở cả hai trạng thái, không nhảy chỗ.
     expect(

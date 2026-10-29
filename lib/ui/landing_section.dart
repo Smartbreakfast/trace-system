@@ -4,223 +4,190 @@ import 'package:url_launcher/url_launcher_string.dart';
 import '../data/trace_api.dart';
 import '../models/trace_models.dart';
 import 'explorer_chrome.dart';
-import 'journey_panel.dart';
 import 'shared_components.dart';
 
 /// Trang chủ lúc chưa tra cứu lô nào.
 ///
 /// Bản trước mở ra là vào thẳng dòng Tú Lệ Smart Breakfast, vì hồi đó hệ thống
 /// chỉ có mỗi dòng ấy. Giờ đã có ba cơ sở và còn nhận thêm, nên mặc định đứng
-/// về một mặt hàng là nói sai về chính mình: đây là hệ thống dùng chung, không
-/// phải trang của một sản phẩm.
+/// về một mặt hàng là nói sai về chính mình.
 ///
-/// Danh sách dưới đây đọc từ danh mục đang chạy chứ không viết cứng trong mã.
-/// Thêm một dòng sản phẩm vào hệ thống là trang chủ có thêm một mục, không ai
-/// phải nhớ ra để sửa trang này.
+/// Danh sách đọc từ danh mục đang chạy chứ không viết cứng trong mã: thêm một
+/// dòng sản phẩm vào hệ thống là trang chủ có thêm một thẻ.
 class LandingSection extends StatelessWidget {
-  const LandingSection({
-    required this.products,
-    this.onOpenCode,
-    super.key,
-  });
+  const LandingSection({required this.products, this.onOpenCode, super.key});
 
   final List<PublicProduct> products;
   final void Function(String code)? onOpenCode;
 
-  @override
-  Widget build(BuildContext context) {
-    final compact = Breakpoints.isCompact(context);
-    final lots = products.fold<int>(0, (sum, item) => sum + item.batches.length);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 10),
-        const PanelEyebrow('Hệ thống truy xuất nguồn gốc'),
-        const SizedBox(height: 10),
-        Text(
-          'Mỗi lô hàng một hồ sơ riêng',
-          style: compact
-              ? pageTitleStyle
-              : displayTitleStyle.copyWith(fontSize: 34),
-        ),
-        const SizedBox(height: 12),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: const Text(
-            'Quét mã QR trên bao bì hoặc nhập mã lô vào ô phía trên để xem lô '
-            'đó làm từ nguyên liệu nào, đi qua những công đoạn nào, và đối '
-            'chiếu với bản ghi đã neo lên blockchain.',
-            style: TextStyle(fontSize: 16, color: brandMuted, height: 1.6),
-          ),
-        ),
-        const SizedBox(height: 34),
-        _Heading(
-          'Sản phẩm đang truy xuất trên hệ thống',
-          products.isEmpty
-              ? 'Đang đọc danh mục.'
-              : '${products.length} dòng sản phẩm, $lots lô đã công bố. '
-                    'Bấm một mã lô để mở hồ sơ của lô đó.',
-        ),
-        const SizedBox(height: 16),
-        for (final product in products) ...[
-          _ProductRow(
-            product: product,
-            compact: compact,
-            onOpenCode: onOpenCode,
-          ),
-          const SizedBox(height: 14),
-        ],
-        const SizedBox(height: 22),
-        _ServiceCard(compact: compact),
-      ],
-    );
+  /// Số thẻ một hàng. Ảnh sản phẩm là thứ người xem nhận ra trước chữ, nên
+  /// thà ít cột mà ảnh lớn còn hơn nhồi cho kín bề ngang.
+  static int _columns(double width) {
+    if (width < 640) return 1;
+    if (width < 1040) return 2;
+    return 3;
   }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.title, this.caption);
-  final String title;
-  final String caption;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: sectionTitleStyle),
-      const SizedBox(height: 6),
-      Text(caption, style: sectionCaptionStyle),
-    ],
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = _columns(constraints.maxWidth);
+      final compact = columns == 1;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: compact ? 14 : 26),
+          Text(
+            'Mỗi lô hàng một hồ sơ riêng',
+            style: compact
+                ? pageTitleStyle
+                : displayTitleStyle.copyWith(fontSize: 38, height: 1.15),
+          ),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: const Text(
+              'Quét mã QR trên bao bì hoặc nhập mã lô để xem lô đó làm từ gì, '
+              'qua những công đoạn nào.',
+              style: TextStyle(fontSize: 16, color: brandMuted, height: 1.6),
+            ),
+          ),
+          SizedBox(height: compact ? 30 : 44),
+          Text('Sản phẩm trên hệ thống', style: sectionTitleStyle),
+          const SizedBox(height: 16),
+          _Grid(
+            columns: columns,
+            children: [
+              for (final product in products)
+                _ProductCard(product: product, onOpenCode: onOpenCode),
+            ],
+          ),
+          SizedBox(height: compact ? 30 : 44),
+          _ServiceBand(compact: compact),
+        ],
+      );
+    },
   );
 }
 
-/// Một dòng sản phẩm: ảnh lô mới nhất, mô tả, rồi các mã lô.
-///
-/// Mã lô để ngay đây chứ không giấu sau một trang trung gian: người vào trang
-/// này phần lớn đang cầm một gói hàng, họ cần đúng một cú bấm để tới hồ sơ.
-class _ProductRow extends StatelessWidget {
-  const _ProductRow({
-    required this.product,
-    required this.compact,
-    this.onOpenCode,
-  });
+/// Lưới thẻ chia theo số cột cho trước, hàng cuối thiếu thì chừa chỗ trống
+/// chứ không giãn thẻ ra cho đầy hàng.
+class _Grid extends StatelessWidget {
+  const _Grid({required this.columns, required this.children});
 
-  final PublicProduct product;
-  final bool compact;
-  final void Function(String code)? onOpenCode;
+  final int columns;
+  final List<Widget> children;
+
+  static const _gap = 18.0;
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(product.name, style: sectionTitleStyle),
-        if (product.description.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            product.description,
-            style: const TextStyle(
-              fontSize: 14,
-              color: brandMuted,
-              height: 1.55,
-            ),
+    final rows = <Widget>[];
+    for (var start = 0; start < children.length; start += columns) {
+      final end = (start + columns).clamp(0, children.length);
+      final row = children.sublist(start, end);
+      rows.add(
+        // Căng cho các thẻ cùng một hàng cao bằng nhau: dòng có nhiều lô hơn
+        // thì thẻ dài hơn, để nguyên thì đáy hàng răng cưa.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var index = 0; index < columns; index++) ...[
+                if (index > 0) const SizedBox(width: _gap),
+                Expanded(
+                  child: index < row.length ? row[index] : const SizedBox(),
+                ),
+              ],
+            ],
           ),
-        ],
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final batch in product.batches)
-              _LotChip(batch: batch, onTap: onOpenCode),
-          ],
         ),
-      ],
-    );
-
-    final picture = _Cover(url: product.cover, size: compact ? 92 : 132);
-
-    return Container(
-      padding: EdgeInsets.all(compact ? 14 : 18),
-      decoration: BoxDecoration(
-        color: brandSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: brandLine),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          picture,
-          SizedBox(width: compact ? 12 : 18),
-          Expanded(child: body),
-        ],
-      ),
-    );
+      );
+      if (end < children.length) rows.add(const SizedBox(height: _gap));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
   }
 }
 
-class _Cover extends StatelessWidget {
-  const _Cover({required this.url, required this.size});
-  final String url;
-  final double size;
+/// Một dòng sản phẩm: ảnh lô mới nhất, tên, rồi các mã lô.
+///
+/// Mã lô để ngay trên thẻ chứ không giấu sau một trang trung gian: người vào
+/// trang này phần lớn đang cầm một gói hàng, họ cần đúng một cú bấm tới hồ sơ.
+class _ProductCard extends StatelessWidget {
+  const _ProductCard({required this.product, this.onOpenCode});
+
+  final PublicProduct product;
+  final void Function(String code)? onOpenCode;
 
   @override
-  Widget build(BuildContext context) {
-    if (url.isEmpty) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: componentCream,
-          borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => Container(
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      color: brandSurface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: brandLine),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: product.cover.isEmpty
+              ? const ColoredBox(color: componentCream)
+              : Image.network(
+                  TraceApi.mediaUrl(product.cover),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, _, _) =>
+                      const ColoredBox(color: componentCream),
+                ),
         ),
-        alignment: Alignment.center,
-        child: const Icon(Icons.inventory_2_outlined, color: brandMuted),
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        TraceApi.mediaUrl(url),
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, _) => Container(
-          width: size,
-          height: size,
-          color: componentCream,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.name,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: componentInk,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final batch in product.batches)
+                    _LotChip(batch: batch, onTap: onOpenCode),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 class _LotChip extends StatelessWidget {
   const _LotChip({required this.batch, this.onTap});
+
   final BatchRef batch;
   final void Function(String code)? onTap;
 
   @override
   Widget build(BuildContext context) => Material(
     color: componentCream,
-    borderRadius: BorderRadius.circular(10),
+    borderRadius: BorderRadius.circular(9),
     child: InkWell(
       onTap: onTap == null ? null : () => onTap!(batch.code),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(9),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(batch.code, style: monoStyle.copyWith(fontSize: 13)),
-            if (batch.productionDate.isNotEmpty) ...[
-              const SizedBox(width: 10),
-              Text(
-                batch.productionDate,
-                style: const TextStyle(fontSize: 12, color: brandMuted),
-              ),
-            ],
-          ],
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        child: Text(batch.code, style: monoStyle.copyWith(fontSize: 12.5)),
       ),
     ),
   );
@@ -228,46 +195,18 @@ class _LotChip extends StatelessWidget {
 
 /// Lời mời cơ sở khác đưa hàng lên hệ thống.
 ///
-/// Chỉ kể đúng những thứ hệ thống đang làm được và người đọc kiểm lại được
-/// ngay trên trang này. Không hứa gì về giá, thời gian triển khai hay chứng
-/// nhận: những cái đó phải do người nhận đăng ký trả lời.
-class _ServiceCard extends StatelessWidget {
-  const _ServiceCard({required this.compact});
+/// Chỉ một câu: ai đọc tới đây đã xem ba dòng sản phẩm ở trên rồi, họ cần biết
+/// mình liên hệ ai chứ không cần nghe giảng lại hệ thống làm được gì.
+class _ServiceBand extends StatelessWidget {
+  const _ServiceBand({required this.compact});
+
   final bool compact;
 
-  static const _points = <({IconData icon, String title, String body})>[
-    (
-      icon: Icons.qr_code_2,
-      title: 'Mã QR riêng cho từng lô',
-      body: 'In lên bao bì của chính lô đó. Người mua quét ra hồ sơ của mẻ họ '
-          'đang cầm, không phải một trang giới thiệu chung.',
-    ),
-    (
-      icon: Icons.account_tree_outlined,
-      title: 'Hồ sơ theo công đoạn',
-      body: 'Khai nguyên liệu đầu vào và từng bước chế biến kèm khối lượng vào '
-          'ra, người thực hiện và ảnh chụp tại chỗ.',
-    ),
-    (
-      icon: Icons.verified_outlined,
-      title: 'Neo lên blockchain',
-      body: 'Lúc công bố, hệ thống băm toàn bộ hồ sơ rồi ghi mã băm lên mạng '
-          'VBSN. Sửa lại dữ liệu sau đó là trang truy xuất báo sai lệch ngay.',
-    ),
-  ];
-
   @override
-  Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.all(compact ? 18 : 26),
-    decoration: BoxDecoration(
-      color: brandPanel,
-      borderRadius: BorderRadius.circular(18),
-    ),
-    child: Column(
+  Widget build(BuildContext context) {
+    final words = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PanelEyebrow('Dành cho cơ sở sản xuất'),
-        const SizedBox(height: 10),
         const Text(
           'Đưa sản phẩm của bạn lên hệ thống',
           style: TextStyle(
@@ -277,70 +216,41 @@ class _ServiceCard extends StatelessWidget {
             height: 1.3,
           ),
         ),
-        const SizedBox(height: 10),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: const Text(
-            'Hệ thống này không gắn riêng với một mặt hàng nào. Ba dòng sản '
-            'phẩm ở trên thuộc ba cơ sở khác nhau và chạy trên cùng một nền '
-            'tảng. Cơ sở có nhu cầu truy xuất cho sản phẩm của mình đăng ký để '
-            'được cấp tài khoản khai báo riêng.',
-            style: TextStyle(fontSize: 15, color: brandMuted, height: 1.65),
-          ),
-        ),
-        const SizedBox(height: 20),
-        if (compact)
-          for (final point in _points) ...[
-            _Point(point: point),
-            const SizedBox(height: 14),
-          ]
-        else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final point in _points) ...[
-                Expanded(child: _Point(point: point)),
-                if (point != _points.last) const SizedBox(width: 22),
-              ],
-            ],
-          ),
-        const SizedBox(height: 22),
-        FilledButton(
-          onPressed: () => launchUrlString(
-            '$landingUrl/lien-he',
-            webOnlyWindowName: '_blank',
-          ),
-          child: const Text('Liên hệ để đăng ký'),
+        const SizedBox(height: 8),
+        const Text(
+          'Các dòng sản phẩm ở trên thuộc những cơ sở khác nhau, chạy chung '
+          'một hệ thống. Cơ sở muốn truy xuất cho sản phẩm của mình đăng ký '
+          'để được cấp tài khoản khai báo riêng.',
+          style: TextStyle(fontSize: 15, color: brandMuted, height: 1.65),
         ),
       ],
-    ),
-  );
-}
+    );
 
-class _Point extends StatelessWidget {
-  const _Point({required this.point});
-  final ({IconData icon, String title, String body}) point;
+    final button = FilledButton(
+      onPressed: () =>
+          launchUrlString('$landingUrl/lien-he', webOnlyWindowName: '_blank'),
+      child: const Text('Liên hệ đăng ký'),
+    );
 
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(point.icon, size: 22, color: brandOrangeText),
-      const SizedBox(height: 9),
-      Text(
-        point.title,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: componentInk,
-          height: 1.4,
-        ),
+    return Container(
+      padding: EdgeInsets.all(compact ? 20 : 30),
+      decoration: BoxDecoration(
+        color: brandPanel,
+        borderRadius: BorderRadius.circular(18),
       ),
-      const SizedBox(height: 5),
-      Text(
-        point.body,
-        style: const TextStyle(fontSize: 13.5, color: brandMuted, height: 1.6),
-      ),
-    ],
-  );
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [words, const SizedBox(height: 18), button],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: words),
+                const SizedBox(width: 32),
+                button,
+              ],
+            ),
+    );
+  }
 }
