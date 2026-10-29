@@ -11,7 +11,7 @@ import 'shared_components.dart';
 
 /// Địa chỉ trang giới thiệu. Đổi lúc build nếu tên miền thay đổi:
 /// `--dart-define=LANDING_URL=https://smartbreakfast.store`
-const _landingUrl = String.fromEnvironment(
+const landingUrl = String.fromEnvironment(
   'LANDING_URL',
   defaultValue: 'https://smartbreakfast.store',
 );
@@ -76,7 +76,7 @@ class _ExplorerHeaderState extends State<ExplorerHeader> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final full = width >= ExplorerHeader.fullNavWidth;
-    final orderUrl = '$_landingUrl/lien-he#dat-hang';
+    final orderUrl = '$landingUrl/lien-he#dat-hang';
 
     // `.wrap` của trang giới thiệu: rộng tối đa 1200px kể cả lề trong 24px.
     // Giữ nguyên con số để hai thanh trên đặt cạnh nhau thì thương hiệu và
@@ -121,7 +121,7 @@ class _ExplorerHeaderState extends State<ExplorerHeader> {
                                   )
                                 : _MenuLink(
                                     label: item.label,
-                                    url: '$_landingUrl${item.path}',
+                                    url: '$landingUrl${item.path}',
                                     current: false,
                                   ),
                         ],
@@ -274,7 +274,7 @@ class _MobileMenu extends StatelessWidget {
                 )
               : _MobileMenuRow(
                   label: item.label,
-                  url: '$_landingUrl${item.path}',
+                  url: '$landingUrl${item.path}',
                   current: false,
                   onPick: onPick,
                 ),

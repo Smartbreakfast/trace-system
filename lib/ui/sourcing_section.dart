@@ -18,29 +18,9 @@ import 'shared_components.dart';
 /// để làm việc đó là trả giá bằng vài trăm KB trên đường truyền của người vừa
 /// quét mã QR ngoài chợ.
 class SourcingSection extends StatefulWidget {
-  const SourcingSection({
-    required this.record,
-    this.samples = const [],
-    this.onOpenCode,
-    this.productName,
-    this.page = 0,
-    this.pageCount = 1,
-    this.onPageChanged,
-    super.key,
-  });
+  const SourcingSection({required this.record, super.key});
 
-  /// Vài lô đã công bố, chỉ dùng ở trạng thái chưa tra cứu.
-  final List<BatchRef> samples;
-  final void Function(String code)? onOpenCode;
-  final String? productName;
-  final int page;
-  final int pageCount;
-  final ValueChanged<int>? onPageChanged;
-
-  /// Null nghĩa là chưa tra cứu lô nào. Khung vẫn dựng y hệt, chỉ là sơ đồ
-  /// chưa có gì và panel là lời mời nhập mã. Đổi layout giữa hai trạng thái
-  /// làm trang giật một cái ngay khi vừa nhận kết quả.
-  final TraceRecord? record;
+  final TraceRecord record;
 
   @override
   State<SourcingSection> createState() => _SourcingSectionState();
@@ -72,44 +52,40 @@ class _SourcingSectionState extends State<SourcingSection> {
   Widget build(BuildContext context) {
     final record = widget.record;
     final wide = _isWide;
-    final facilityName = (record?.batch.facilityName ?? '').isEmpty
+    final facilityName = record.batch.facilityName.isEmpty
         ? 'Nơi sản xuất'
-        : record!.batch.facilityName;
+        : record.batch.facilityName;
 
     final panel = _PanelShell(
-      // Lúc chưa tra cứu, thẻ là chỗ giới thiệu sản phẩm nên mang tông xanh;
-      // có kết quả rồi thì về nền trắng để ảnh và chữ của hồ sơ đứng rõ.
-      tinted: record == null,
-      centred: record == null && wide,
-      child: record == null
-          ? EmptyResultPanel(
-              samples: widget.samples,
-              onOpenCode: widget.onOpenCode,
-              productName: widget.productName,
-              page: widget.page,
-              pageCount: widget.pageCount,
-              onPageChanged: widget.onPageChanged,
-            )
-          : _ResultBody(
-              record: record,
-              selection: selection,
-              facilityName: facilityName,
-              // Chỉ khoá chiều cao trên desktop; màn hẹp để cả trang cuộn.
-              locked: wide,
-              onSelect: _select,
-            ),
+      child: _ResultBody(
+        record: record,
+        selection: selection,
+        facilityName: facilityName,
+        // Chỉ khoá chiều cao trên desktop; màn hẹp để cả trang cuộn.
+        locked: wide,
+        onSelect: _select,
+      ),
     );
 
     final canvasHeight = wide ? _canvasHeight : 380.0;
-    final areaImage = record?.areaMap;
+    final areaImage = record.areaMap;
 
     final Widget canvas;
-    if (record == null || record.ingredients.isEmpty) {
+    if (record.ingredients.isEmpty) {
+      // Lô chưa khai nguyên liệu thì không có gì để vẽ. Để trống hẳn chứ
+      // không chèn ảnh một sản phẩm nào đó cho đỡ trống: hệ thống chạy cho
+      // nhiều cơ sở, ảnh của dòng này đặt vào hồ sơ dòng kia là nói sai.
       canvas = _CanvasShell(
         height: canvasHeight,
-        child: Container(
-          color: const Color(0xFFF2F4EE),
-          child: Image.asset('assets/tule-box.jpg', fit: BoxFit.contain),
+        child: const ColoredBox(
+          color: Color(0xFFF2F4EE),
+          child: Center(
+            child: Icon(
+              Icons.account_tree_outlined,
+              size: 44,
+              color: brandMuted,
+            ),
+          ),
         ),
       );
     } else {
@@ -314,25 +290,14 @@ class _SwitchButton extends StatelessWidget {
   );
 }
 
-/// Khung của panel bên phải. Tách riêng để trạng thái chưa tra cứu và trạng
-/// thái có kết quả dùng đúng một cái thẻ, không đổi bố cục khi kết quả về.
+/// Khung của panel bên phải.
 class _PanelShell extends StatelessWidget {
-  const _PanelShell({
-    required this.child,
-    this.tinted = false,
-    this.centred = false,
-  });
-
-  /// Canh nội dung vào giữa thẻ. Dùng cho trạng thái chưa tra cứu.
-  final bool centred;
+  const _PanelShell({required this.child});
 
   static double padFor(BuildContext context) =>
       Breakpoints.isCompact(context) ? 14 : 18;
 
   final Widget child;
-
-  /// Nền xanh nhạt thay cho trắng, dùng cho thẻ giới thiệu lúc chưa tra cứu.
-  final bool tinted;
 
   @override
   Widget build(BuildContext context) {
@@ -348,17 +313,9 @@ class _PanelShell extends StatelessWidget {
     );
 
     return Container(
-      alignment: centred ? Alignment.center : null,
       padding: EdgeInsets.all(padFor(context)),
       decoration: BoxDecoration(
-        color: tinted ? null : brandSurface,
-        gradient: tinted
-            ? const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFFBFDF8), brandPanel],
-              )
-            : null,
+        color: brandSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: brandLine),
       ),
@@ -1031,163 +988,3 @@ class _EventRow extends StatelessWidget {
   );
 }
 
-/// Panel khi chưa tra cứu lô nào.
-///
-/// Giữ đúng chỗ của panel kết quả để trang không đổi bố cục lúc kết quả về:
-/// chỉ nội dung bên trong đổi, khung bên trái đứng yên.
-class EmptyResultPanel extends StatelessWidget {
-  const EmptyResultPanel({
-    this.samples = const [],
-    this.onOpenCode,
-    this.productName,
-    this.page = 0,
-    this.pageCount = 1,
-    this.onPageChanged,
-    super.key,
-  });
-
-  final List<BatchRef> samples;
-  final void Function(String code)? onOpenCode;
-  final String? productName;
-  final int page;
-  final int pageCount;
-  final ValueChanged<int>? onPageChanged;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      // Ảnh sản phẩm thật thay cho một ô icon: người vừa cầm hộp trên tay nhận
-      // ra ngay mình vào đúng chỗ.
-      ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Image.asset(
-          'assets/tule-products.jpg',
-          height: 190,
-          width: double.infinity,
-          fit: BoxFit.cover,
-        ),
-      ),
-      const SizedBox(height: 18),
-      const Text('Tra cứu một lô sản phẩm', style: displayTitleStyle),
-      const SizedBox(height: 8),
-      const Text(
-        'Quét mã QR trên bao bì, hoặc nhập mã lô.',
-        style: sectionCaptionStyle,
-      ),
-      // Người chưa cầm bao bì trên tay thì không có mã nào để gõ. Đưa sẵn vài
-      // lô đã công bố để họ xem thử được ngay.
-      if (samples.isNotEmpty) ...[
-        const SizedBox(height: 22),
-        Container(height: 1, color: brandLine),
-        const SizedBox(height: 16),
-        PanelEyebrow(productName == null ? 'Lô đã công bố' : 'Lô ${productName!}'),
-        const SizedBox(height: 10),
-        for (final item in samples) ...[
-          _SampleRow(batch: item, onTap: onOpenCode),
-          const SizedBox(height: 8),
-        ],
-        if (pageCount > 1) ...[
-          const SizedBox(height: 4),
-          _BatchPagination(
-            page: page,
-            pageCount: pageCount,
-            onPageChanged: onPageChanged,
-          ),
-        ],
-      ],
-    ],
-  );
-}
-
-class _BatchPagination extends StatelessWidget {
-  const _BatchPagination({
-    required this.page,
-    required this.pageCount,
-    this.onPageChanged,
-  });
-
-  final int page;
-  final int pageCount;
-  final ValueChanged<int>? onPageChanged;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text('Trang ${page + 1} / $pageCount', style: sectionCaptionStyle),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Trang trước',
-            visualDensity: VisualDensity.compact,
-            onPressed: page > 0 && onPageChanged != null
-                ? () => onPageChanged!(page - 1)
-                : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          IconButton(
-            tooltip: 'Trang sau',
-            visualDensity: VisualDensity.compact,
-            onPressed: page + 1 < pageCount && onPageChanged != null
-                ? () => onPageChanged!(page + 1)
-                : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    ],
-  );
-}
-
-/// Một lô gợi ý: mã lô đứng trước vì đó là thứ người dùng sẽ đối chiếu.
-class _SampleRow extends StatelessWidget {
-  const _SampleRow({required this.batch, this.onTap});
-
-  final BatchRef batch;
-  final void Function(String code)? onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: brandSurface,
-    borderRadius: BorderRadius.circular(12),
-    child: InkWell(
-      onTap: onTap == null ? null : () => onTap!(batch.code),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: brandLine),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(batch.code, style: monoStyle.copyWith(fontSize: 14)),
-                  if (batch.name.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      batch.productionDate.isEmpty
-                          ? batch.name
-                          : '${batch.name}  ·  SX ${batch.productionDate}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: brandMuted, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, size: 18, color: brandMuted),
-          ],
-        ),
-      ),
-    ),
-  );
-}

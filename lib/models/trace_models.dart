@@ -504,6 +504,7 @@ class PublicProduct {
     required this.name,
     this.description = '',
     this.templateKey = '',
+    this.cover = '',
     this.batches = const [],
   });
 
@@ -511,6 +512,10 @@ class PublicProduct {
   final String name;
   final String description;
   final String templateKey;
+
+  /// Ảnh bìa của lô mới nhất. Rỗng khi dòng sản phẩm chưa có lô nào công bố
+  /// hoặc lô đó chưa đính ảnh bìa.
+  final String cover;
   final List<BatchRef> batches;
 
   factory PublicProduct.fromApi(Map<String, dynamic> json) => PublicProduct(
@@ -518,6 +523,7 @@ class PublicProduct {
     name: _str(json, ['name'], or: 'Sản phẩm chưa đặt tên'),
     description: _str(json, ['description']),
     templateKey: _str(json, ['templateKey', 'template_key']),
+    cover: _str(json, ['cover']),
     batches: [
       for (final item in (json['batches'] as List<dynamic>? ?? const []))
         if (item is Map<String, dynamic>) BatchRef.fromApi(item),

@@ -11,6 +11,7 @@ import '../models/trace_models.dart';
 import '../ui/async_states.dart';
 import '../ui/explorer_chrome.dart';
 import '../ui/explorer_tabs.dart';
+import '../ui/landing_section.dart';
 import '../ui/rating_section.dart';
 import '../ui/shared_components.dart';
 import '../ui/sourcing_section.dart';
@@ -42,12 +43,8 @@ class _ExplorerPageState extends State<ExplorerPage> {
   /// đúng gói mình đang cầm trước, rồi mới truy nguồn gốc.
   ExplorerTab tab = ExplorerTab.general;
 
-  /// Vài lô đã công bố, gợi ý cho người mở trang mà chưa có mã nào trong tay.
-  List<BatchRef> samples = const [];
   List<PublicProduct> products = const [];
   String selectedSku = 'tule-breakfast';
-  int batchPage = 0;
-  static const batchesPerPage = 3;
   String? failureMessage;
   bool verifying = false;
 
@@ -58,7 +55,6 @@ class _ExplorerPageState extends State<ExplorerPage> {
   void initState() {
     super.initState();
     _load();
-    _loadSamples();
     _loadCatalog();
   }
 
@@ -85,17 +81,6 @@ class _ExplorerPageState extends State<ExplorerPage> {
       });
     } on TraceApiFailure {
       // The trace itself remains usable if the optional product menu is down.
-    }
-  }
-
-  /// Danh sách gợi ý chỉ cần cho trang chưa tra cứu, hỏng thì im lặng bỏ qua:
-  /// nó là tiện ích, không phải nội dung của trang.
-  Future<void> _loadSamples() async {
-    try {
-      final list = await api.publicBatches();
-      if (mounted) setState(() => samples = list);
-    } on TraceApiFailure {
-      // Không có gợi ý thì thôi, ô tra cứu vẫn dùng được.
     }
   }
 
@@ -248,28 +233,7 @@ class _ExplorerPageState extends State<ExplorerPage> {
     context.go('/t/$code');
   }
 
-  PublicProduct? get _selectedProduct =>
-      products.where((product) => product.sku == selectedSku).firstOrNull;
-
-  List<BatchRef> get _visibleBatches {
-    final batches = _selectedProduct?.batches ?? const <BatchRef>[];
-    final start = batchPage * batchesPerPage;
-    if (start >= batches.length) return const [];
-    final end = (start + batchesPerPage).clamp(0, batches.length);
-    return batches.sublist(start, end);
-  }
-
-  int get _batchPageCount {
-    final count = _selectedProduct?.batches.length ?? 0;
-    return count == 0 ? 1 : (count + batchesPerPage - 1) ~/ batchesPerPage;
-  }
-
-  void _changeProduct(String sku) {
-    setState(() {
-      selectedSku = sku;
-      batchPage = 0;
-    });
-  }
+  void _changeProduct(String sku) => setState(() => selectedSku = sku);
 
   void _selectProductForCode(String? code) {
     if (code == null) return;
@@ -343,18 +307,14 @@ class _ExplorerPageState extends State<ExplorerPage> {
   }
 
   Widget _body(BuildContext context, bool wide) => switch (phase) {
+    // Chưa tra cứu lô nào thì trang chủ là trang giới thiệu hệ thống, không
+    // phải khung hồ sơ rỗng của một dòng sản phẩm nào đó.
     LoadPhase.idle => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SourcingSection(
-          record: null,
-          samples: _visibleBatches.isEmpty ? samples : _visibleBatches,
-          onOpenCode: _openCode,
-          productName: _selectedProduct?.name,
-          page: batchPage,
-          pageCount: _batchPageCount,
-          onPageChanged: (page) => setState(() => batchPage = page),
-        ),
+        LandingSection(products: products, onOpenCode: _openCode),
+        const SizedBox(height: 30),
+        ExplorerFooter(wide: wide),
       ],
     ),
     LoadPhase.loading => TraceSkeleton(wide: wide),

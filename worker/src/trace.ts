@@ -393,6 +393,24 @@ export async function publicCatalog(db: D1Database): Promise<PublicProduct[]> {
       ORDER BY CASE c.sku WHEN 'tule-breakfast' THEN 0 ELSE 1 END,
                c.name COLLATE NOCASE, p.id DESC`,
   );
+  // Ảnh bìa của lô mới nhất, dùng làm ảnh đại diện cho cả dòng sản phẩm trên
+  // trang giới thiệu. Lấy từ chính lô đã công bố chứ không phải một ảnh khai
+  // riêng cho sản phẩm: trang chủ khi đó luôn cho thấy thứ đang thật sự chạy.
+  const covers = new Map<string, string>();
+  for (const row of await all(
+    db,
+    `SELECT c.sku, m.r2_key
+       FROM products c
+       JOIN product_batches p ON p.product_id = c.id AND p.status = 'PUBLISHED'
+       JOIN media_assets m ON m.owner_type = 'product_batch'
+                          AND m.owner_id = p.id AND m.role = 'cover'
+      WHERE c.status = 'ACTIVE' AND c.product_kind = 'finished'
+      ORDER BY p.id DESC, m.id DESC`,
+  )) {
+    const sku = String(row.sku);
+    if (!covers.has(sku)) covers.set(sku, `/api/media/${row.r2_key}`);
+  }
+
   const products = new Map<string, Row>();
   for (const row of rows) {
     const sku = String(row.sku);
@@ -401,6 +419,7 @@ export async function publicCatalog(db: D1Database): Promise<PublicProduct[]> {
       name: row.product_name,
       description: row.description,
       templateKey: row.template_key,
+      cover: covers.get(sku) ?? '',
       batches: [],
     };
     if (row.code) {

@@ -10,6 +10,7 @@ import 'package:com_tule/pages/explorer_page.dart';
 import 'package:com_tule/pages/management_page.dart';
 import 'package:com_tule/pages/metrics_page.dart';
 import 'package:com_tule/ui/shared_components.dart';
+import 'package:com_tule/ui/landing_section.dart';
 import 'package:com_tule/ui/sourcing_section.dart';
 import 'package:com_tule/ui/explorer_chrome.dart';
 import 'package:com_tule/ui/trace_components.dart';
@@ -441,17 +442,40 @@ void main() {
     expect(find.text('ĐÃ XÁC MINH'), findsOneWidget);
   });
 
-  testWidgets('trang chủ chưa tra cứu thì không tự tải lô nào', (tester) async {
+  testWidgets('trang chủ là trang giới thiệu, không tự tải lô nào', (
+    tester,
+  ) async {
     final asked = <String>[];
     final api = _api(
       MockClient((request) async {
         asked.add(request.url.path);
-        if (request.url.path.endsWith('/public/batches')) {
+        if (request.url.path.endsWith('/public/catalog')) {
           return _json([
             {
-              'code': 'TL-2026-002',
-              'name': 'Bột ngũ cốc Tú Lệ Smart Breakfast',
-              'productionDate': '07.09.2026',
+              'sku': 'tule-breakfast',
+              'name': 'Tú Lệ Smart Breakfast',
+              'description': 'Bột ngũ cốc dinh dưỡng từ nông sản bản địa.',
+              'cover': '/api/media/media/abc.jpg',
+              'batches': [
+                {
+                  'code': 'TL-2026-002',
+                  'name': 'Gói 30g',
+                  'productionDate': '07.09.2026',
+                },
+              ],
+            },
+            {
+              'sku': 'tao-meo-o-mai',
+              'name': 'Ô mai táo mèo Đoàn Lương',
+              'description': 'Quả táo mèo sên đường rồi sấy khô.',
+              'cover': '',
+              'batches': [
+                {
+                  'code': 'TM-2026-001',
+                  'name': 'Mẻ tháng 09',
+                  'productionDate': '10.09.2026',
+                },
+              ],
             },
           ]);
         }
@@ -462,32 +486,27 @@ void main() {
     await tester.pumpWidget(_app(api, location: '/'));
     await _settle(tester);
 
-    // Hỏi danh sách lô gợi ý thì được, nhưng không được tự mở hồ sơ lô nào.
+    // Hỏi danh mục thì được, nhưng không được tự mở hồ sơ lô nào.
     expect(
       asked.where((path) => path.contains('/traces/')),
       isEmpty,
       reason: 'trang chủ không được tự tải hồ sơ lô',
     );
-    expect(find.text('TL-2026-002'), findsOneWidget);
-    expect(find.text('Lô đã công bố'.toUpperCase()), findsOneWidget);
-    expect(find.text('Tra cứu một lô sản phẩm'), findsOneWidget);
-    expect(find.text('Tú Lệ Smart Breakfast'), findsNothing);
 
-    // Khung giống hệt trang có kết quả, chỉ là panel đang rỗng: đổi bố cục
-    // giữa hai trạng thái làm trang giật ngay lúc kết quả về.
-    expect(find.byType(SourcingSection), findsOneWidget);
-    expect(find.byType(EmptyResultPanel), findsOneWidget);
-    // Khung trái lúc chưa tra cứu là ảnh sản phẩm, không phải một dòng chữ
-    // báo rằng chỗ này sẽ có gì.
-    expect(
-      find.byWidgetPredicate(
-        (w) =>
-            w is Image &&
-            w.image is AssetImage &&
-            (w.image as AssetImage).assetName == 'assets/tule-box.jpg',
-      ),
-      findsOneWidget,
-    );
+    // Trang chủ không còn đứng về một dòng sản phẩm: cả hai dòng cùng hiện,
+    // và không có hồ sơ lô nào được mở sẵn.
+    expect(find.byType(LandingSection), findsOneWidget);
+    expect(find.byType(SourcingSection), findsNothing);
+    expect(find.text('Tú Lệ Smart Breakfast'), findsOneWidget);
+    expect(find.text('Ô mai táo mèo Đoàn Lương'), findsOneWidget);
+    expect(find.text('TL-2026-002'), findsOneWidget);
+    expect(find.text('TM-2026-001'), findsOneWidget);
+    expect(find.text('2 dòng sản phẩm, 2 lô đã công bố. '
+        'Bấm một mã lô để mở hồ sơ của lô đó.'), findsOneWidget);
+
+    // Lời mời cơ sở khác đăng ký dịch vụ truy xuất.
+    expect(find.text('Đưa sản phẩm của bạn lên hệ thống'), findsOneWidget);
+    expect(find.text('Liên hệ để đăng ký'), findsOneWidget);
 
     // Ô tra cứu ở navbar có mặt ở cả hai trạng thái, không nhảy chỗ.
     expect(

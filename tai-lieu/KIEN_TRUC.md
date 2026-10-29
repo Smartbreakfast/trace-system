@@ -338,6 +338,24 @@ Ranh giới đó lặp lại ở cả hai nơi hiển thị:
   số không còn là bằng chứng kiểm lại được nữa. Trang này gọi
   `GET /api/public/metrics`, chỉ đọc, không nhận tham số, không ghi gì.
 
+## 4.6 Trang chủ là trang giới thiệu hệ thống
+
+`/` không mở vào một dòng sản phẩm nào. Bản đầu mặc định vào Tú Lệ Smart
+Breakfast vì hồi đó hệ thống chỉ có mỗi dòng ấy; từ khi có ba cơ sở thì mặc
+định như vậy là nói sai về chính mình, và mỗi lần thêm một cơ sở lại phải nhớ
+ra để sửa trang chủ.
+
+Trang chủ đọc `GET /api/public/catalog` rồi dựng danh sách từ đó, nên thêm một
+dòng sản phẩm vào hệ thống là trang chủ có thêm một mục, không ai phải sửa mã.
+Mỗi dòng sản phẩm hiện kèm ảnh bìa của lô mới nhất: trường `cover` của catalog
+lấy từ chính lô đã công bố chứ không phải một ảnh khai riêng cho sản phẩm, để
+trang chủ luôn cho thấy thứ đang thật sự chạy.
+
+Phần cuối trang mời cơ sở khác đăng ký đưa hàng lên hệ thống, trỏ về trang liên
+hệ của trang giới thiệu. Nội dung phần này chỉ kể những việc hệ thống đang làm
+được và người đọc kiểm lại được ngay trên cùng trang đó; không hứa giá, thời
+gian triển khai hay chứng nhận, vì những cái đó do người nhận đăng ký trả lời.
+
 Bốn dòng đầu của trang công khai hệ thống tự đếm được nên không ai sửa được:
 số cơ sở, số sản phẩm và lô, số lô đã neo (đếm `published_snapshots` có bản ghi
 `blockchain_outbox` ở trạng thái `CONFIRMED`), số lượt đánh giá và điểm trung
